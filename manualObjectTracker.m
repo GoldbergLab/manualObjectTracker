@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 29-May-2019 14:15:09
+% Last Modified by GUIDE v2.5 28-Oct-2019 14:03:02
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -339,9 +339,9 @@ if get(handles.autoLoadROIs, 'Value') && ischar(file)
             end
 %        end
     end
-end
-if ~foundROIFile
-    disp('...no corresponding ROI file found.');
+    if ~foundROIFile
+        disp('...no corresponding ROI file found.');
+    end
 end
 
 function [x, y] = createBlankROIs(numFrames, numROIs)
@@ -2151,3 +2151,25 @@ if ~isempty(answer)
     guidata(hObject, handles);
     updateDisplay(hObject);
 end
+
+
+% --- Executes on button press in swapROIs.
+function swapROIs_Callback(hObject, eventdata, handles)
+% hObject    handle to swapROIs (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+handles = guidata(hObject);
+handles.ROIData.(handles.currUser).xFreehands = permuteRows(handles.ROIData.(handles.currUser).xFreehands);
+handles.ROIData.(handles.currUser).yFreehands = permuteRows(handles.ROIData.(handles.currUser).yFreehands);
+handles.ROIData.(handles.currUser).xPoints = permuteRows(handles.ROIData.(handles.currUser).xPoints);
+handles.ROIData.(handles.currUser).yPoints = permuteRows(handles.ROIData.(handles.currUser).yPoints);
+handles = noteThatChangesNeedToBeSaved(handles);
+guidata(hObject, handles);
+updateDisplay(hObject);
+
+function permutedArray = permuteRows(array)
+shape = size(array);
+rows = shape(1);
+idx = [rows, 1:(rows-1)];
+permutedArray = array(idx, :);
