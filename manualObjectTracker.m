@@ -290,7 +290,7 @@ if ischar(file)
         handles.videoData = zeros([size(imageData), 1]);
         handles.videoData(:, :, 1) = imageData;
     else
-        handles.videoData = loadVideoData(file);
+        handles.videoData = squeeze(loadVideoData(file));
     end
 else
     % It's video data
