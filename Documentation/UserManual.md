@@ -39,6 +39,10 @@ Prerandomized annotation mode:
   - At the moment, manualObjectTracker is designed to handle only two separate ROIs in each frame.
   - This is hardcoded, but can be easily changed by setting “handles.numROIs” to a different number.
 - Advance to the next frame using the arrow keys or the "<" or ">" buttons
+- By default, when you switch to a different video, your annotations will be automatically saved to disk.
+  - You can also save them at any time by pressing the "Save ROIs to .mat file" button.
+  - By default, the ROIs will be saved to a .mat file named with the video filename plus a suffix, within a subfolder of the video's folder named "ROIs".
+  - This behavior can be changed with the various checkboxes under the "Save" button.
 
 ## Normal Workflow
 ![Normal mode screenshot](NormalMode.png)
@@ -47,7 +51,7 @@ Prerandomized annotation mode:
     - Otherwise, you can skip this step to use the default AnonymousUser.
 2. Select a directory that contains videos by clicking "Choose directory"
 3. Select the video that you want to annotate from the video list
-
+4. Manually segment the feature of interest in each frame of each video (see the [How to annotate](#How-to-annotate-a-video) section)
 
 ## Prerandomized Annotation Workflow
 ![Prerandomized annotation mode screenshot](PrerandomizedMode.png)
@@ -63,3 +67,30 @@ Prerandomized annotation mode:
     - Otherwise, you can skip this step to use the default AnonymousUser.
 4.	Manually segment the feature of interest in each random video clip. (see the [How to annotate](#How-to-annotate-a-video) section)
     - In this mode, the “center” frame of the clip, which should be the one to initially load, is the only one you should manually segment. You do not need to segment any of the other frames, as they are only there to help visually identify the feature through motion.
+
+## Output format
+The annotations are saved to disk in .mat files, each containing a struct with the annotation data. The data structure is as follows:
+
+outputStruct: class struct 1 x 1
+  Fields
+	videoFile: class char 1 x 57 = name of the video file that this annotation corresponds to
+	videoSize: class double 1 x 3 = video size (H x W x N)
+	ROIData: class struct 1 x 1 = struct holding all annotation data
+	Fields
+		AnonymousUser: class struct 1 x 1 = struct holding the annotation data for this user
+		Fields
+			xFreehands: class cell 2 x N = x coordinates of points marked in "Freehand" mode for each frame
+			yFreehands: class cell 2 x N = y coordinates of points marked in "Freehand" mode for each frame
+      xPoints: class cell 2 x N = x coordinates of points marked in "Point" mode for each frame
+			yPoints: class cell 2 x N = y coordinates of points marked in "Point" mode for each frame
+			xProj: class cell 2 x N = for backwards compatibility, not in use
+			zProj: class cell 2 x N = for backwards compatibility, not in use
+			absent: class logical 2 x N = boolean indicating if each feature is absent in each frame
+			stats: class struct 1 x 1
+			Fields
+				areaUnits: for future use
+				areaPixels: for future use
+				pixelScaleMeasurement: for future use
+				unitScaleMeasurement: for future use
+				scaleUnit: for future use
+	manualObjectTrackerVersion: class char 1 x 4 = manualObjectTracker version that created this file
