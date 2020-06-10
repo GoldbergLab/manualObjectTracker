@@ -33,7 +33,7 @@ Prerandomized annotation mode:
 
 
 ## Prerandomized Annotation Workflow
-![Prerandomized annotation mode screenshot](PrerandomzedMode.png)
+![Prerandomized annotation mode screenshot](PrerandomizedMode.png)
 - Markdown: publish the Markdown text on a website that can interpret it (**GitHub** for instance),
 - HTML: publish the file converted to HTML via a Handlebars template (on a blog for example).
 
