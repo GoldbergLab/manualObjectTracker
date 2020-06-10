@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 28-Oct-2019 14:03:02
+% Last Modified by GUIDE v2.5 09-Jun-2020 12:45:30
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -50,7 +50,7 @@ function manualObjectTracker_OpeningFcn(hObject, ~, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to manualObjectTracker (see VARARGIN)
-handles.version = '1.11';
+handles.version = '1.13.1';
 
 switch nargin
     case 4
@@ -104,6 +104,7 @@ set(hObject, 'WindowKeyPressFcn', {@KeyPress, hObject});
 %set(handles.jumpToFrameBox, 'keyPressFcn', @jumpToFrameBox_keyPressFcn);
 
 % Set up sliderAxes grab bar
+cla(handles.sliderAxes);
 handles.sliderGrabBarWidth = 0.1;
 xlim(handles.sliderAxes, [0,1 + handles.sliderGrabBarWidth]);
 ylim(handles.sliderAxes, [0,1]);
@@ -144,11 +145,12 @@ handles.translateCounts.down = 0;
 handles.translateCounts.left = 0;
 handles.translateCounts.right = 0;
 
-
 % Initialize prerandomized annotation mode variables
 handles.rootPrerandomizedAnnotationDirectory = '';
 handles.prerandomizedAnnotationInfo = [];
 handles.prerandomizedCurrentVideoFile = '';
+handles.prerandomizedAnnotationFilepath = '';
+
 % Previous prerandomizedAnnotationVideoListbox selection is stored in UserData
 set(handles.prerandomizedAnnotationVideoListbox, 'UserData', 1);
 set(handles.prerandomizedAnnotationVideoListbox, 'Value', 1);
@@ -1229,8 +1231,11 @@ gifFiles = dir(fullfile(folder, '*.gif'));
 videoFiles = cat(1, movFiles, mp4Files, aviFiles, gifFiles, jpgFiles, pngFiles);
 videoFilenames = {videoFiles.name};
 if isempty(videoFilenames)
+    disp('no videos found')
     videoFilenames = {handles.nullFile};
 end
+disp('found videos:')
+disp(videoFilenames)
 % Update list box entries
 set(handles.fileList, 'String', videoFilenames);
 % Reset selection to the top
@@ -1580,12 +1585,28 @@ if isPrerandomizedTrackingModeOn(handles)
     set(handles.prerandomizedAnnotationFrameNumListbox, 'Visible', 'on');
     set(handles.choosePrerandomizedVideoRootDir, 'Visible', 'on');
     set(handles.choosePrerandomizedAnnotationFile, 'Visible', 'on');
+    set(handles.assemblePrerandomizedAnnotations, 'Visible', 'on');
+    set(handles.createPrerandomizationButton, 'Visible', 'on');
+    
+    set(handles.currentDirectoryLabel, 'Visible', 'off');
+    set(handles.fileListLabel, 'Visible', 'off');
+    set(handles.chooseDirectoryButton, 'Visible', 'off');
+    set(handles.currentDirectory, 'Visible', 'off');
+    set(handles.fileList, 'Visible', 'off');
 else
     set(handles.prerandomizedAnnotationLabel, 'Visible', 'off');
     set(handles.prerandomizedAnnotationVideoListbox, 'Visible', 'off');
     set(handles.prerandomizedAnnotationFrameNumListbox, 'Visible', 'off');
     set(handles.choosePrerandomizedVideoRootDir, 'Visible', 'off');
     set(handles.choosePrerandomizedAnnotationFile, 'Visible', 'off');
+    set(handles.assemblePrerandomizedAnnotations, 'Visible', 'off');
+    set(handles.createPrerandomizationButton, 'Visible', 'off');
+
+    set(handles.currentDirectoryLabel, 'Visible', 'on');
+    set(handles.fileListLabel, 'Visible', 'on');
+    set(handles.chooseDirectoryButton, 'Visible', 'on');
+    set(handles.currentDirectory, 'Visible', 'on');
+    set(handles.fileList, 'Visible', 'on');
 end
 
 function mode = isPrerandomizedTrackingModeOn(handles)
@@ -1687,15 +1708,15 @@ function choosePrerandomizedVideoRootDir_Callback(hObject, ~, handles)
 
 % Disable annotation file choosing button until a root directory has been
 %   chosen
-set(handles.choosePrerandomizedAnnotationFile,'Enable','off') 
+%set(handles.choosePrerandomizedAnnotationFile,'Enable','off') 
 currentPath = get(handles.currentDirectory, 'String');
 if isempty(currentPath)
     currentPath = handles.defaultPath;
 end
-PathName = uigetdir(currentPath,'Select a root directory containing all the video files in the randomized annotation file');
+PathName = uigetdir(currentPath,'Select a root directory containing all the video or video clip files in the randomized annotation file');
 disp(['Root dir selected: ', PathName]);
 handles.rootPrerandomizedAnnotationDirectory = PathName;
-set(handles.choosePrerandomizedAnnotationFile,'Enable','on') 
+%set(handles.choosePrerandomizedAnnotationFile,'Enable','on')
 set(handles.currentDirectory, 'String', PathName);
 guidata(hObject, handles);
 
@@ -1726,23 +1747,30 @@ else
 end
 
 % --- Executes on button press in choosePrerandomizedAnnotationFile.
-function choosePrerandomizedAnnotationFile_Callback(hObject, ~, handles)
+function choosePrerandomizedAnnotationFile_Callback(hObject, ~, handles, varargin)
 % hObject    handle to choosePrerandomizedAnnotationFile (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 if isempty(handles.rootPrerandomizedAnnotationDirectory)
-    warndlg('Please choose a root directory to search for videos first.')
-    return
+   warndlg('Please choose a video (clip) dir to search for videos first.')
+   return
 end
-currentPath = get(handles.currentDirectory, 'String');
-if isempty(currentPath)
-    currentPath = handles.defaultPath;
+
+if ~isempty(varargin)
+    prerandomizedAnnotationFilepath = varargin{1};
+else
+    % Prompt user for a prerandomized annotation filepath
+    currentPath = get(handles.currentDirectory, 'String');
+    if isempty(currentPath)
+        currentPath = handles.defaultPath;
+    end
+    [PRAFile, PRAPath] = uigetfile(fullfile(currentPath, '*.mat'),'Select a prerandomized annotation file');
+    prerandomizedAnnotationFilepath = fullfile(PRAPath, PRAFile);
 end
-% Prompt user for a prerandomized annotation filepath
-[PRAFile, PRAPath] = uigetfile(fullfile(currentPath, '*.mat'),'Select a prerandomized annotation file');
-prerandomizedAnnotationFilepath = fullfile(PRAPath, PRAFile);
+
 disp(['Prerandomized annotation file selected: ', prerandomizedAnnotationFilepath]);
 if ~isempty(prerandomizedAnnotationFilepath)
+    handles.prerandomizedAnnotationFilepath = prerandomizedAnnotationFilepath;
     try
         disp('loading annotation file...')
         s = load(prerandomizedAnnotationFilepath, 'manualTrackingList');
@@ -1874,7 +1902,7 @@ function helpdialog(handles)
         '  space            - play/pause video'  ...
         '  ctl-z            - undo last point of current ROI', ...
         '  delete           - clear all points for current ROI', ...
-        '  c                - close the ROI', ...
+        '  c                - close the ROI and move to the next frame', ...
         '  shift-n          - mark current ROI as "no tongue"', ...
         '  n                - mark all ROIs as "no tongue"', ...
         '  left arrow       - back 1 frame', ...
@@ -2173,3 +2201,37 @@ shape = size(array);
 rows = shape(1);
 idx = [rows, 1:(rows-1)];
 permutedArray = array(idx, :);
+
+
+% --- Executes on button press in assemblePrerandomizedAnnotations.
+function assemblePrerandomizedAnnotations_Callback(hObject, eventdata, handles)
+% hObject    handle to assemblePrerandomizedAnnotations (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+p = assembleRandomManualTrackingAnnotationsGUI({handles.prerandomizedAnnotationFilepath, handles.rootPrerandomizedAnnotationDirectory});
+if p.complete
+    msgbox(['Assembling random manual tracking annotations is complete. You can find your file at ', p.saveFilepath], 'Done assembling random manual tracking annotations.');
+end
+
+% --- Executes on button press in createPrerandomizationButton.
+function createPrerandomizationButton_Callback(hObject, eventdata, handles)
+% hObject    handle to createPrerandomizationButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+p = generateRandomManualTrackingListGUI();
+if isempty(p)
+    return;
+end
+generateRandomManualTrackingList(p.videoRootDirectories, ...
+    p.videoRegex, ...
+    p.videoExtensions, ...
+    p.numAnnotations, ...
+    p.saveFilename, ...
+    p.clipDirectory, ...
+    p.clipRadius);
+handles.rootPrerandomizedAnnotationDirectory = p.clipDirectory;
+%set(handles.choosePrerandomizedAnnotationFile,'Enable','on')
+set(handles.currentDirectory, 'String', p.clipDirectory);
+choosePrerandomizedAnnotationFile_Callback(hObject, eventdata, handles, p.saveFilename);
+msgbox('Generating random manual tracking list is complete! You may now annotate the randomly selected videos or clips.', 'Generation complete.');
