@@ -20,11 +20,12 @@ Manual segmentation of images requires a computer pointing device. Users report 
 3. To start the program, type "manualObjectTracker" into the MATLAB command line and press enter.
 
 ## Modes
-###Normal mode:
-Use when you simply have one or more videos, and you want to manually segment objects in the videos.
+Normal mode:
+>Use when you simply have one or more videos, and you want to manually segment objects in the videos.
 
-###Prerandomized annotation mode:
-Use when you want to randomly sample frames to segment from a large set of videos. This can help prevent overtraining of the algorithm on a small number of videos by spreading out the training set over a large number of videos.
+Prerandomized annotation mode:
+
+> Use when you want to randomly sample frames to segment from a large set of videos. This can help prevent overtraining of the algorithm on a small number of videos by spreading out the training set over a large number of videos.
 
 ## How to annotate a video
 - Click on the filename of a video clip in the list.
