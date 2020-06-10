@@ -1,7 +1,7 @@
 # manualObjectTracker User Manual
 Manual object tracker is a MATLAB GUI designed to allow manual segmentation of objects in videos. Its intended use is the assembly of training sets for machine learning image segmentation algorithms.
 
-####Please note: this user manual is a work in progress
+Please note: this user manual is a work in progress
 
 ## Modes
 Normal mode:
