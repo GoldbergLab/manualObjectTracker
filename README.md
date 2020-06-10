@@ -6,8 +6,8 @@ manualObjectTracker was developed with and for MATLAB R2017a. Use it with other 
 
 ## Installation
 
-1. Download manualObjectTracker.fig and manualObjectTracker.m
-2. Add the above files to your MATLAB path.
+1. Download all files or clone the repo
+2. Add the files to your MATLAB path.
 3. Open MATLAB
 4. In the command window, type ```manualObjectTracker```
 5. Off you go.
