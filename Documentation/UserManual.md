@@ -13,7 +13,6 @@ Prerandomized annotation mode:
 
 ## How to annotate a video
 - Click on the filename of each video clip in the list in turn.
-- The “center” frame of the clip, which should be the one to initially load, is the one to manually segment. You do not need to segment any of the other frames, as they are only there to help visually identify the feature through motion.
 - Click or click and drag to draw a polygon around the feature.
 - Various controls and keyboard shortcuts are described in the “help” dialogue (click the “Help” button). For example:
   - Right clicking will start and stop a zoom box to zoom in on the feature to allow more accurate annotations.
@@ -45,3 +44,4 @@ Prerandomized annotation mode:
     - Click the “Switch user” button, and “sign in” so you can annotate under your own user ID.
     - Otherwise, you can skip this step to use the default AnonymousUser.
 4.	Manually segment the feature of interest in each random video clip. (see the [How to annotate](#How-to-annotate-a-video) section)
+    - In this mode, the “center” frame of the clip, which should be the one to initially load, is the only one you should manually segment. You do not need to segment any of the other frames, as they are only there to help visually identify the feature through motion.
