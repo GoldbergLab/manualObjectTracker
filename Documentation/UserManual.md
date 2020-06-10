@@ -3,6 +3,22 @@ Manual object tracker is a MATLAB GUI designed to allow manual segmentation of o
 
 Please note: this user manual is a work in progress
 
+## System equirements
+
+manualObjectTracker has been tested on MATLAB for Windows 10 versions 2017a and 2019a, but should work on any MATLAB version >= v9.6. It has not been tested on any non-Windows OS.
+
+The following MATLAB toolboxes are required:
+ - Image Processing Toolbox >= v10.4
+ - Statistics and Machine Learning Toolbox >= v11.5
+
+Manual segmentation of images requires a computer pointing device. Users report that the process is much easier, quicker, and more accurate with a stylus-type device, such as a Microsoft Surface Pen.
+
+## Installation
+
+1. Download/clone all files to your computer
+2. Add the downloaded files to your [MATLAB path](https://www.mathworks.com/help/matlab/matlab_env/what-is-the-matlab-search-path.html)
+3. Type "manualObjectTracker" into the MATLAB command line and press enter.
+
 ## Modes
 Normal mode:
 >Use when you simply have one or more videos, and you want to manually segment objects in the videos.
