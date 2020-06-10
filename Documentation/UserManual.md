@@ -72,13 +72,13 @@ Prerandomized annotation mode:
 The annotations are saved to disk in .mat files, each containing a struct with the annotation data. The data structure is as follows:
 
 - outputStruct: class struct 1 x 1
-  Fields
+  - Fields
 	- videoFile: class char 1 x 57 = name of the video file that this annotation corresponds to
 	- videoSize: class double 1 x 3 = video size (H x W x N)
 	- ROIData: class struct 1 x 1 = struct holding all annotation data
-	Fields
+	- Fields
 		- AnonymousUser: class struct 1 x 1 = struct holding the annotation data for this user
-		Fields
+		- Fields
 			- xFreehands: class cell 2 x N = x coordinates of points marked in "Freehand" mode for each frame
 			- yFreehands: class cell 2 x N = y coordinates of points marked in "Freehand" mode for each frame
       - xPoints: class cell 2 x N = x coordinates of points marked in "Point" mode for each frame
@@ -87,7 +87,7 @@ The annotations are saved to disk in .mat files, each containing a struct with t
 			- zProj: class cell 2 x N = for backwards compatibility, not in use
 			- absent: class logical 2 x N = boolean indicating if each feature is absent in each frame
 			- stats: class struct 1 x 1
-			Fields
+			- Fields
 				- areaUnits: for future use
 				- areaPixels: for future use
 				- pixelScaleMeasurement: for future use
