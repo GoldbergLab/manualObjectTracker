@@ -53,15 +53,19 @@ for k = 1:numVideos
     ROIFiles = findFilesByRegex(baseDirectory, ROIRegexp);
     if isempty(ROIFiles)
         disp(['Warning, no ROI file found for video', videoFilename])
-    elseif length(ROIFiles) > 1
-        disp(['Warning, multiple ROI files matched video', videoFilename])
+        ROIFile = [];
+        usersCurrent = {};
+    else
+        if length(ROIFiles) > 1
+            disp(['Warning, multiple ROI files matched video', videoFilename])
+        end
+        ROIFile = ROIFiles{1};
+        % Load current ROI data
+        a = load(ROIFile);
+        outputStructCurrent = a.outputStruct;
+        usersCurrent = fields(outputStructCurrent.ROIData);
     end
-    ROIFile = ROIFiles{1};
-    
-    % Load current ROI data
-    a = load(ROIFile);
-    outputStructCurrent = a.outputStruct;
-    usersCurrent = fields(outputStructCurrent.ROIData);
+
     % Check what users are present in the current ROI data, and if they
     %   aren't present in the combined data, preallocate blank data for them
     for j = 1:length(usersCurrent)
@@ -70,7 +74,7 @@ for k = 1:numVideos
             outputStruct.ROIData.(userCurrent) = createNewUserROIData(numFrames, numROIs);
         end
     end
-    
+
     % Update the originalFrameNumbers and originalVideoPaths fields with
     %   the new data
     outputStruct.originalFrameNumbers = [outputStruct.originalFrameNumbers, frameNumbers];

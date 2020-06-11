@@ -50,13 +50,15 @@ function manualObjectTracker_OpeningFcn(hObject, ~, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to manualObjectTracker (see VARARGIN)
-handles.version = '1.13.1';
+handles.version = '1.14';
 
 switch nargin
     case 4
         loadVideoOrImage(hObject, varargin{1});
         handles = guidata(hObject);
 end
+
+videoDependentControlEnableState(handles, 'off')
 
 % Default path to start when browsing for files
 handles.defaultPath = '';
@@ -146,7 +148,6 @@ handles.translateCounts.left = 0;
 handles.translateCounts.right = 0;
 
 % Initialize prerandomized annotation mode variables
-handles.rootPrerandomizedAnnotationDirectory = '';
 handles.prerandomizedAnnotationInfo = [];
 handles.prerandomizedCurrentVideoFile = '';
 handles.prerandomizedAnnotationFilepath = '';
@@ -174,6 +175,23 @@ updateDisplay(hObject);
 %start(handles.timer);
 % UIWAIT makes manualObjectTracker wait for user response (see UIRESUME)
 %uiwait(handles.figure1);
+
+function videoDependentControlEnableState(handles, enabledState)
+set(handles.saveROIs, 'Enable', enabledState);
+set(handles.loadROIs, 'Enable', enabledState);
+set(handles.adjustContrast, 'Enable', enabledState);
+set(handles.playPause, 'Enable', enabledState);
+set(handles.backFrame, 'Enable', enabledState);
+set(handles.forwardFrame, 'Enable', enabledState);
+set(handles.jumpToFrameBox, 'Enable', enabledState);
+set(handles.absentTongueButton, 'Enable', enabledState);
+set(handles.clearButton, 'Enable', enabledState);
+set(handles.undoButton, 'Enable', enabledState);
+set(handles.clearROIs, 'Enable', enabledState);
+set(handles.closeROI, 'Enable', enabledState);
+set(handles.swapROIs, 'Enable', enabledState);
+set(handles.rotateROIButton, 'Enable', enabledState);
+set(handles.scaleROIButton, 'Enable', enabledState);
 
 function startSlide(hObject, evt)
 handles = guidata(hObject);
@@ -255,6 +273,24 @@ function userROIData = createNewUserROIData(numFrames, numROIs)
 userROIData.absent = createBlankAbsentData(numFrames, numROIs);
 userROIData.stats = createBlankStatsData(numFrames, numROIs);
 
+function unloadVideoOrImage(hObject)
+handles = guidata(hObject);
+disp('unloadVideoOrImage');
+% Reset all ROI data
+[handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
+[handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
+[handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
+handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
+handles.k = 1;
+guidata(hObject, handles);
+updateDisplay(hObject);
+handles = guidata(hObject);
+handles.videoData = [];
+handles.numFrames = 0;
+videoDependentControlEnableState(handles, 'off')
+guidata(hObject, handles);
+updateDisplay(hObject);
+
 function loadVideoOrImage(hObject, file)
 % Load a video or image from file, and reset all variables relating to the video and ROI data
 handles = guidata(hObject);
@@ -315,6 +351,7 @@ end
 [handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
 handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
 handles.k = 1;
+videoDependentControlEnableState(handles, 'on')
 guidata(hObject, handles);
 %updateDisplay(hObject);
 
@@ -334,7 +371,7 @@ if get(handles.autoLoadROIs, 'Value') && ischar(file)
 %            [~, ii] = min(cellfun(@length, matFileNames(indices)));
 %            index = indices(ii);
 %        ROIfullfile = fullfile(defaultROIFolder, cell2mat(matFileNames(index)));
-        ROIfullfile = fullfile(defaultROIFolder, makeROINameFromVideoName(vname))
+        ROIfullfile = fullfile(defaultROIFolder, makeROINameFromVideoName(vname));
             if exist(ROIfullfile, 'file')
                 foundROIFile = true;
                 loadROIs(hObject, ROIfullfile);
@@ -463,7 +500,13 @@ switch EventData.Key
         end
     case 'delete'
         % del = clear all points
-        clearButton_Callback(hObject, NaN, handles)
+        choice = questdlg('Are you sure you want to delete the current ROI?', 'Delete ROI?', 'Delete', 'Cancel', 'Delete');
+        switch choice
+            case 'Delete'
+                clearButton_Callback(hObject, NaN, handles)
+            case 'Cancel'
+                return
+        end
     case 'c'
         % Close ROI
         if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
@@ -474,7 +517,7 @@ switch EventData.Key
         handles = noteThatChangesNeedToBeSaved(handles);
         guidata(hObject, handles);
         updateDisplay(hObject);
-        changeFrame(NaN, NaN, hObject, 'delta', 1);
+%        changeFrame(NaN, NaN, hObject, 'delta', 1);
     case 'n'
         k = handles.k;
         n = handles.activeROINum;
@@ -721,6 +764,7 @@ handles = guidata(hObject);
 k = handles.k;
 if handles.numFrames == 0
     % No video frames present, do not update GUI
+    set(handles.hImage, 'CData', []);
     return;
 end
 
@@ -871,11 +915,17 @@ function [xCoords, yCoords] = getUpdatedCoords(xClick, yClick, xCoords, yCoords,
 % Based on current ROI coordinates xCoords and yCoords, new click
 %   coordinates xClick and yClick, and autoClose, which determines whether
 %   the ROI should be closed, return an updated list of ROI coordinates
+if autoClose && isROIClosed(xCoords, yCoords) && length(xCoords) > 1
+    % ROI is already closed - unclose it first
+    xCoords = xCoords(1:end-1);
+    yCoords = yCoords(1:end-1);
+end
+% Add newest point
+xCoords = [xCoords, xClick];
+yCoords = [yCoords, yClick];
 if autoClose
+    % Close ROI
     [xCoords, yCoords] = closeROI(xCoords, yCoords);
-else
-    xCoords = [xCoords, xClick];
-    yCoords = [yCoords, yClick];
 end
 
 function windowButtonUpHandler(hObject, ~)
@@ -1222,26 +1272,29 @@ end
 function updateListBox(hObject, folder)
 handles = guidata(hObject);
 % Get video file list
-aviFiles = dir(fullfile(folder, '*.avi'));
-movFiles = dir(fullfile(folder, '*.mov'));
-mp4Files = dir(fullfile(folder, '*.mp4'));
-jpgFiles = dir(fullfile(folder, '*.jpg'));
-pngFiles = dir(fullfile(folder, '*.png'));
-gifFiles = dir(fullfile(folder, '*.gif'));
-videoFiles = cat(1, movFiles, mp4Files, aviFiles, gifFiles, jpgFiles, pngFiles);
-videoFilenames = {videoFiles.name};
-if isempty(videoFilenames)
-    disp('no videos found')
-    videoFilenames = {handles.nullFile};
+if isempty(folder)
+    videoFilenames = {};
+else
+    aviFiles = dir(fullfile(folder, '*.avi'));
+    movFiles = dir(fullfile(folder, '*.mov'));
+    mp4Files = dir(fullfile(folder, '*.mp4'));
+    jpgFiles = dir(fullfile(folder, '*.jpg'));
+    pngFiles = dir(fullfile(folder, '*.png'));
+    gifFiles = dir(fullfile(folder, '*.gif'));
+    videoFiles = cat(1, movFiles, mp4Files, aviFiles, gifFiles, jpgFiles, pngFiles);
+    videoFilenames = {videoFiles.name};
 end
-disp('found videos:')
-disp(videoFilenames)
-% Update list box entries
-set(handles.fileList, 'String', videoFilenames);
+handles = setFileList(handles, videoFilenames);
+guidata(hObject, handles);
+
+function handles = setFileList(handles, filenames)
+if isempty(filenames)
+    filenames = {handles.nullFile};
+end
+set(handles.fileList, 'String', filenames);
 % Reset selection to the top
 set(handles.fileList, 'Value', 1);
 set(handles.fileList, 'UserData', 1);
-guidata(hObject, handles);
 
 function currentDirectory_Callback(hObject, ~, ~)
 % hObject    handle to currentDirectory (see GCBO)
@@ -1252,7 +1305,31 @@ function currentDirectory_Callback(hObject, ~, ~)
 %        str2double(get(hObject,'String')) returns contents of currentDirectory as a double
 handles = guidata(hObject);
 folder = get(handles.currentDirectory, 'String');
-updateListBox(hObject, folder);
+if isPrerandomizedTrackingModeOn(handles)
+    % Clear normal mode file list box
+    updateListBox(hObject, []);
+    % Get a
+    if ~isempty(folder)
+        matFileList = findFilesByRegex('.', '.*\.mat', false, false);
+        if length(matFileList) == 0
+            % No mat files found
+            warndlg('No prerandomized file lists found. Please create one or choose a directory that contains one.');
+        elseif length(matFileList) == 1
+            prerandomizedAnnotationFile = matFileList{1};
+        elseif length(matFileList) > 1
+            prerandomizedAnnotationFile = itemSelectorDialog({'Select a prerandomized annotation file', matFileList});
+            if strcmp(prerandomizedAnnotationFile, 'Cancel')
+                prerandomizedAnnotationFile = '';
+            else
+                prerandomizedAnnotationFile = prerandomizedAnnotationFile{1};
+            end
+            
+        end
+        choosePrerandomizedAnnotationFile(hObject, [], handles, prerandomizedAnnotationFile);
+    end
+else
+    updateListBox(hObject, folder);
+end
 
 % --- Executes during object creation, after setting all properties.
 function currentDirectory_CreateFcn(hObject, ~, ~)
@@ -1418,6 +1495,12 @@ function clearROIs_Callback(hObject, ~, handles)
 % hObject    handle to clearROIs (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+choice = questdlg('Are you sure you want to delete ALL ROIs for ALL FRAMES of this ENTIRE video?', 'Delete ROIs?', 'Delete', 'Cancel', 'Cancel');
+
+if strcmp(choice, 'Cancel')
+    return;
+end
+
 [proceed, handles] = warnIfLosingROIChanges(handles);
 if proceed
     if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
@@ -1573,41 +1656,24 @@ function helpButton_Callback(hObject, eventdata, handles)
 helpdialog(handles)
 
 % --- Executes on button press in prerandomizedTrackingModeButton.
-function prerandomizedTrackingModeButton_Callback(~, ~, handles)
+function prerandomizedTrackingModeButton_Callback(hObject, ~, handles)
 % hObject    handle to prerandomizedTrackingModeButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of prerandomizedTrackingModeButton
 if isPrerandomizedTrackingModeOn(handles)
-    set(handles.prerandomizedAnnotationLabel, 'Visible', 'on');
-    set(handles.prerandomizedAnnotationVideoListbox, 'Visible', 'on');
-    set(handles.prerandomizedAnnotationFrameNumListbox, 'Visible', 'on');
-    set(handles.choosePrerandomizedVideoRootDir, 'Visible', 'on');
-    set(handles.choosePrerandomizedAnnotationFile, 'Visible', 'on');
-    set(handles.assemblePrerandomizedAnnotations, 'Visible', 'on');
-    set(handles.createPrerandomizationButton, 'Visible', 'on');
-    
-    set(handles.currentDirectoryLabel, 'Visible', 'off');
-    set(handles.fileListLabel, 'Visible', 'off');
-    set(handles.chooseDirectoryButton, 'Visible', 'off');
-    set(handles.currentDirectory, 'Visible', 'off');
-    set(handles.fileList, 'Visible', 'off');
+    set(handles.prerandomizedModePanel, 'Visible', 'on');
+    set(handles.normalModePanel, 'Visible', 'off');
 else
-    set(handles.prerandomizedAnnotationLabel, 'Visible', 'off');
-    set(handles.prerandomizedAnnotationVideoListbox, 'Visible', 'off');
-    set(handles.prerandomizedAnnotationFrameNumListbox, 'Visible', 'off');
-    set(handles.choosePrerandomizedVideoRootDir, 'Visible', 'off');
-    set(handles.choosePrerandomizedAnnotationFile, 'Visible', 'off');
-    set(handles.assemblePrerandomizedAnnotations, 'Visible', 'off');
-    set(handles.createPrerandomizationButton, 'Visible', 'off');
-
-    set(handles.currentDirectoryLabel, 'Visible', 'on');
-    set(handles.fileListLabel, 'Visible', 'on');
-    set(handles.chooseDirectoryButton, 'Visible', 'on');
-    set(handles.currentDirectory, 'Visible', 'on');
-    set(handles.fileList, 'Visible', 'on');
+    set(handles.prerandomizedModePanel, 'Visible', 'off');
+    set(handles.normalModePanel, 'Visible', 'on');
 end
+
+set(handles.currentDirectory, 'String', '');
+guidata(hObject, handles);
+currentDirectory_Callback(hObject, [], handles);
+unloadVideoOrImage(hObject);
 
 function mode = isPrerandomizedTrackingModeOn(handles)
 mode = get(handles.prerandomizedTrackingModeButton, 'Value');
@@ -1700,26 +1766,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-% --- Executes on button press in choosePrerandomizedVideoRootDir.
-function choosePrerandomizedVideoRootDir_Callback(hObject, ~, handles)
-% hObject    handle to choosePrerandomizedVideoRootDir (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Disable annotation file choosing button until a root directory has been
-%   chosen
-%set(handles.choosePrerandomizedAnnotationFile,'Enable','off') 
-currentPath = get(handles.currentDirectory, 'String');
-if isempty(currentPath)
-    currentPath = handles.defaultPath;
-end
-PathName = uigetdir(currentPath,'Select a root directory containing all the video or video clip files in the randomized annotation file');
-disp(['Root dir selected: ', PathName]);
-handles.rootPrerandomizedAnnotationDirectory = PathName;
-%set(handles.choosePrerandomizedAnnotationFile,'Enable','on')
-set(handles.currentDirectory, 'String', PathName);
-guidata(hObject, handles);
-
 function [videoFilename, frameNumber] = getPrerandomizedAnnotationNameAndFrameNumber(handles, varargin)
 if nargin == 2
     previous = varargin{1};
@@ -1746,30 +1792,17 @@ else
     videoFilename = '';
 end
 
-% --- Executes on button press in choosePrerandomizedAnnotationFile.
-function choosePrerandomizedAnnotationFile_Callback(hObject, ~, handles, varargin)
+function choosePrerandomizedAnnotationFile(hObject, ~, handles, varargin)
 % hObject    handle to choosePrerandomizedAnnotationFile (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-if isempty(handles.rootPrerandomizedAnnotationDirectory)
+if isempty(get(handles.currentDirectory, 'String'))
    warndlg('Please choose a video (clip) dir to search for videos first.')
    return
 end
 
 if ~isempty(varargin)
     prerandomizedAnnotationFilepath = varargin{1};
-else
-    % Prompt user for a prerandomized annotation filepath
-    currentPath = get(handles.currentDirectory, 'String');
-    if isempty(currentPath)
-        currentPath = handles.defaultPath;
-    end
-    [PRAFile, PRAPath] = uigetfile(fullfile(currentPath, '*.mat'),'Select a prerandomized annotation file');
-    prerandomizedAnnotationFilepath = fullfile(PRAPath, PRAFile);
-end
-
-disp(['Prerandomized annotation file selected: ', prerandomizedAnnotationFilepath]);
-if ~isempty(prerandomizedAnnotationFilepath)
     handles.prerandomizedAnnotationFilepath = prerandomizedAnnotationFilepath;
     try
         disp('loading annotation file...')
@@ -1793,7 +1826,7 @@ if ~isempty(prerandomizedAnnotationFilepath)
     extensions = strjoin(extensionList, '|');
     
     % Find video files with the correct extension:
-    possibleVideoFiles = findFilesByRegex(handles.rootPrerandomizedAnnotationDirectory, ['.*(', extensions, ')']);
+    possibleVideoFiles = findFilesByRegex(get(handles.currentDirectory, 'String'), ['.*(', extensions, ')']);
     
     for k = 1:length(s.manualTrackingList)
         % Loop through saved list of videos, and find corresponding videos 
@@ -1805,26 +1838,38 @@ if ~isempty(prerandomizedAnnotationFilepath)
 %        vnameRegex = regexptranslate('escape', vname);
         [matchingVFiles, matchingVIndices] = filterWithPattern(possibleVideoFiles, vname);
         if isempty(matchingVFiles)
-            warndlg(['Warning, could not find a video file that matched ', vname, ' in root directory ', handles.rootPrerandomizedAnnotationDirectory, '. Skipping...'], 'manualObjectTracker warning', 'replace');
+            warndlg(['Warning, could not find a video file that matched ', vname, ' in root directory ', get(handles.currentDirectory, 'String'), '. Skipping...'], 'manualObjectTracker warning', 'replace');
         else
             if length(matchingVFiles) > 1
                 disp('Matching video files:')
                 disp(matchingVFiles')
-                warndlg(['Warning, found multiple video files matching that matched ', vname, ' in root directory ', handles.rootPrerandomizedAnnotationDirectory, '. Picking the first one found.'], 'manualObjectTracker warning', 'replace');
+                warndlg(['Warning, found multiple video files matching that matched ', vname, ' in root directory ', get(handles.currentDirectory, 'String'), '. Picking the first one found.'], 'manualObjectTracker warning', 'replace');
             end
             handles.prerandomizedAnnotationInfo(end+1).videoFilename = matchingVFiles{1};
             handles.prerandomizedAnnotationInfo(end).frameNumbers = s.manualTrackingList(k).frameNumbers;
             possibleVideoFiles(matchingVIndices(1)) = [];
         end
     end
-    % Update list boxes
-    handles = updatePrerandomizedAnnotationListboxes(handles);
-    % Select first video
-    set(handles.prerandomizedAnnotationVideoListbox, 'Value', 1);
-    set(handles.prerandomizedAnnotationVideoListbox, 'UserData', 1);
-    guidata(hObject, handles)
-    prerandomizedAnnotationVideoListbox_Callback(hObject, NaN, NaN);
+else
+    % Clear prerandomized info
+    handles.prerandomizedAnnotationInfo = [];
+%     % Prompt user for a prerandomized annotation filepath
+%     currentPath = get(handles.currentDirectory, 'String');
+%     if isempty(currentPath)
+%         currentPath = handles.defaultPath;
+%     end
+%     [PRAFile, PRAPath] = uigetfile(fullfile(currentPath, '*.mat'),'Select a prerandomized annotation file');
+%     prerandomizedAnnotationFilepath = fullfile(PRAPath, PRAFile);
 end
+
+disp(['Prerandomized annotation file selected: ', prerandomizedAnnotationFilepath]);
+% Update list boxes
+handles = updatePrerandomizedAnnotationListboxes(handles);
+% Select first video
+set(handles.prerandomizedAnnotationVideoListbox, 'Value', 1);
+set(handles.prerandomizedAnnotationVideoListbox, 'UserData', 1);
+guidata(hObject, handles)
+prerandomizedAnnotationVideoListbox_Callback(hObject, NaN, NaN);
 
 % --- Executes on selection change in prerandomizedAnnotationFrameNumListbox.
 function prerandomizedAnnotationFrameNumListbox_Callback(hObject, ~, handles)
@@ -1902,7 +1947,7 @@ function helpdialog(handles)
         '  space            - play/pause video'  ...
         '  ctl-z            - undo last point of current ROI', ...
         '  delete           - clear all points for current ROI', ...
-        '  c                - close the ROI and move to the next frame', ...
+        '  c                - close the ROI', ...
         '  shift-n          - mark current ROI as "no tongue"', ...
         '  n                - mark all ROIs as "no tongue"', ...
         '  left arrow       - back 1 frame', ...
@@ -2208,7 +2253,8 @@ function assemblePrerandomizedAnnotations_Callback(hObject, eventdata, handles)
 % hObject    handle to assemblePrerandomizedAnnotations (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-p = assembleRandomManualTrackingAnnotationsGUI({handles.prerandomizedAnnotationFilepath, handles.rootPrerandomizedAnnotationDirectory});
+[proceed, handles] = warnIfLosingROIChanges(handles);
+p = assembleRandomManualTrackingAnnotationsGUI({handles.prerandomizedAnnotationFilepath, get(handles.currentDirectory, 'String'), 'assembledRandomFrames'});
 if p.complete
     msgbox(['Assembling random manual tracking annotations is complete. You can find your file at ', p.saveFilepath], 'Done assembling random manual tracking annotations.');
 end
@@ -2230,8 +2276,7 @@ generateRandomManualTrackingList(p.videoRootDirectories, ...
     p.saveFilename, ...
     p.clipDirectory, ...
     p.clipRadius);
-handles.rootPrerandomizedAnnotationDirectory = p.clipDirectory;
 %set(handles.choosePrerandomizedAnnotationFile,'Enable','on')
 set(handles.currentDirectory, 'String', p.clipDirectory);
-choosePrerandomizedAnnotationFile_Callback(hObject, eventdata, handles, p.saveFilename);
+choosePrerandomizedAnnotationFile(hObject, eventdata, handles, p.saveFilename);
 msgbox('Generating random manual tracking list is complete! You may now annotate the randomly selected videos or clips.', 'Generation complete.');
