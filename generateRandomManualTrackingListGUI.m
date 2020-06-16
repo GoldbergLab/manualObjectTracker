@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 09-Jun-2020 12:48:33
+% Last Modified by GUIDE v2.5 12-Jun-2020 14:45:27
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -94,7 +94,6 @@ if ~any(strcmp(currentDirs, newDir))
     set(handles.videoRootDirectories, 'String', currentDirs);
     guidata(hObject, handles);
 end
-
 
 function videoRootDirectories_Callback(hObject, eventdata, handles)
 % hObject    handle to videoRootDirectories (see GCBO)
@@ -193,44 +192,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-
-function saveFilename_Callback(hObject, eventdata, handles)
-% hObject    handle to saveFilename (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of saveFilename as text
-%        str2double(get(hObject,'String')) returns contents of saveFilename as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function saveFilename_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to saveFilename (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in saveFilenameBrowseButton.
-function saveFilenameBrowseButton_Callback(hObject, eventdata, handles)
-% hObject    handle to saveFilenameBrowseButton (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-[file, path] = uiputfile('*.m', 'Select file to save random annotation file');
-if all(file == 0) || all(path == 0)
-    return;
-end
-filepath = fullfile(path, file);
-handles.saveFilename.String = filepath;
-guidata(hObject, handles);
-
-
 function clipDirectory_Callback(hObject, eventdata, handles)
 % hObject    handle to clipDirectory (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -292,14 +253,17 @@ function runButton_Callback(hObject, eventdata, handles)
 % hObject    handle to runButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+saveFilename = 'randomizedAnnotationList.mat';
+
 output = struct();
 output.videoRootDirectories = handles.videoRootDirectories.String;
 output.videoRegex = handles.videoRegex.String;
 output.videoExtensions = handles.videoExtensions.String;
 output.numAnnotations = str2double(handles.numAnnotations.String);
-output.saveFilename = handles.saveFilename.String;
 output.clipDirectory = handles.clipDirectory.String;
 output.clipRadius = str2double(handles.clipRadius.String);
+output.saveFilepath = fullfile(output.clipDirectory, saveFilename);
+output.recursiveSearch = logical(get(handles.recursiveSearch, 'Value'));
 handles.output = output;
 guidata(hObject, handles);
 figure1_CloseRequestFcn(handles.figure1, eventdata, handles)
@@ -316,3 +280,12 @@ if isequal(get(hObject, 'waitstatus'), 'waiting')
 else
     delete(hObject);
 end
+
+
+% --- Executes on button press in recursiveSearch.
+function recursiveSearch_Callback(hObject, eventdata, handles)
+% hObject    handle to recursiveSearch (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of recursiveSearch

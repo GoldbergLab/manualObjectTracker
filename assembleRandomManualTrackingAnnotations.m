@@ -13,6 +13,12 @@ function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath
 %
 % Written by Brian Kardon bmk27@cornell.edu 2018
 
+[saveFiledir, ~, ~] = fileparts(saveFilepath);
+if ~exist(saveFiledir, 'dir')
+    disp(['Creating save file directory: ', saveFiledir])
+    mkdir(saveFiledir);
+end
+
 % Load file containing list of video filepaths that were annotated
 s = load(prerandomizedAnnotationFilepath);
 manualTrackingList = s.manualTrackingList;

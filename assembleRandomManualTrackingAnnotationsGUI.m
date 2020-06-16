@@ -57,19 +57,19 @@ if length(varargin) == 1 && iscell(varargin{1})
     varargin = varargin{1};
 
     if length(varargin) >= 1
-        prerandomizedAnnotationFilepath = varargin{1};
-    else
-        prerandomizedAnnotationFilepath = '';
-    end
-    if length(varargin) >= 2
-        baseDirectory = varargin{2};
+        baseDirectory = varargin{1};
     else
         baseDirectory = '';
     end
-    if length(varargin) >= 3
-        saveFilepath = varargin{3};
+    if length(varargin) >= 2
+        saveFilepath = varargin{2};
     else
         saveFilepath = '';
+    end
+    if length(varargin) >= 3
+        prerandomizedAnnotationFilepath = varargin{3};
+    else
+        prerandomizedAnnotationFilepath = '';
     end
     % Choose default command line output for assembleRandomManualTrackingAnnotationsGUI
     handles.output.prerandomizedAnnotationFilepath = prerandomizedAnnotationFilepath;
@@ -77,7 +77,6 @@ if length(varargin) == 1 && iscell(varargin{1})
     handles.output.saveFilepath = saveFilepath;
 
     % Set up default field values
-    set(handles.prerandomizedAnnotationFilepath, 'String', prerandomizedAnnotationFilepath);
     set(handles.baseDirectory, 'String', baseDirectory);
     set(handles.saveFilepath, 'String', saveFilepath);
 end
@@ -222,44 +221,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-
-function prerandomizedAnnotationFilepath_Callback(hObject, eventdata, handles)
-% hObject    handle to prerandomizedAnnotationFilepath (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of prerandomizedAnnotationFilepath as text
-%        str2double(get(hObject,'String')) returns contents of prerandomizedAnnotationFilepath as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function prerandomizedAnnotationFilepath_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to prerandomizedAnnotationFilepath (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in prerandomizedAnnotationFilepathBrowseButton.
-function prerandomizedAnnotationFilepathBrowseButton_Callback(hObject, eventdata, handles)
-% hObject    handle to prerandomizedAnnotationFilepathBrowseButton (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-[file, path] = uigetfile('*.mat', 'Find prerandomized annotation file');
-if all(file == 0) || all(path == 0)
-    return;
-end
-filepath = fullfile(path, file);
-handles.prerandomizedAnnotationFilepath.String = filepath;
-guidata(hObject, handles);
-
-
 function baseDirectory_Callback(hObject, eventdata, handles)
 % hObject    handle to baseDirectory (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -321,9 +282,13 @@ function runButton_Callback(hObject, eventdata, handles)
 % hObject    handle to runButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-handles.output.prerandomizedAnnotationFilepath = get(handles.prerandomizedAnnotationFilepath, 'String');
 handles.output.baseDirectory = get(handles.baseDirectory, 'String');
 handles.output.saveFilepath = get(handles.saveFilepath, 'String');
+if isempty(handles.output.prerandomizedAnnotationFilepath)
+    % Use default filepath for prerandomized annotation list
+    defaultPrerandomizedAnnotationFilename = 'randomizedAnnotationList.mat';
+    handles.output.prerandomizedAnnotationFilepath = fullfile(handles.output.baseDirectory, defaultPrerandomizedAnnotationFilename);
+end
 assembleRandomManualTrackingAnnotations( ...
     handles.output.prerandomizedAnnotationFilepath, ...
     handles.output.baseDirectory, ...

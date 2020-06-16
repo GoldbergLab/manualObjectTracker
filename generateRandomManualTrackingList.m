@@ -1,4 +1,4 @@
-function manualTrackingList = generateRandomManualTrackingList(videoBaseDirectories, videoRegex, extensions, numAnnotations, saveFilename, varargin)
+function manualTrackingList = generateRandomManualTrackingList(videoBaseDirectories, videoRegex, extensions, numAnnotations, saveFilepath, varargin)
 % Recursively searches videoBaseDirectory for videos that match the
 %   identifyingVideoStrings and extensions, and generates a file containing
 %   video names and a corresponding random selection of frame numbers to annotate.
@@ -14,20 +14,18 @@ function manualTrackingList = generateRandomManualTrackingList(videoBaseDirector
 %                               '.avi') or a cell array of char arrays
 %                               containing file extensions.
 % numAnnotations:           total number of random frame numbers to pick from the pool of videos
-% saveFilename:             filename in which to save annotation data
+% saveFilepath:             file path in which to save annotation data
 % clipDirectory (optional): A directory to save video clips around each frame
 % clipRadius (optional):    The # of frames on either side of selected
 %                           frame to include in the clip. Default = 10
-% combineClips (optional):  If clips should be combined together into a
-%                           larger video, an integer corresponding to how many 
-%                           clips per video. Otherwise, 0.
+% recursiveSearch (optional):  Should video directory be searched recursively (including subfolders)? Default false.
 %
 % Returns:
 % manualTrackingList:       The list of video filenames and frame numbers
 %                               that is both returned and saved to file
-if nargin > 5
+if length(varargin) >= 1
     clipDirectory = varargin{1};
-    if nargin == 7
+    if length(varargin) >= 2
         clipRadius = varargin{2};
     else
         clipRadius = 10;
@@ -36,18 +34,20 @@ else
     clipDirectory = '';
     clipRadius = 0;
 end
-% if nargin == 8
-%     combineClips = varargin{1};
-% else
-%     combineClips = 0;
-% end
+if length(varargin) >= 3
+    recursiveSearch = varargin{3};
+else
+    recursiveSearch = false;
+end
+disp('recursiveSearch:')
+disp(recursiveSearch)
 if ~iscell(videoBaseDirectories)
     videoBaseDirectories = {videoBaseDirectories};
 end    
 
 % Find files that match extension and regex
 disp('Finding matching files with correct extension...');
-vfps = cellfun(@(videoBaseDirectory)findFilesByExtension(videoBaseDirectory, extensions), videoBaseDirectories, 'UniformOutput', false);
+vfps = cellfun(@(videoBaseDirectory)findFilesByExtension(videoBaseDirectory, extensions, recursiveSearch), videoBaseDirectories, 'UniformOutput', false);
 videoFilepaths = sort([vfps{:}]);
 if isempty(videoFilepaths)
     disp(strjoin([{'Warning, no files found for video identifier'}, extensions], ' '))
@@ -155,6 +155,6 @@ for k = 1:numClips
     manualTrackingList(videoIndex).frameNumbers(end+1) = frameNumber;
 end
 
-if ~isempty(saveFilename)
-    save(saveFilename, 'manualTrackingList');
+if ~isempty(saveFilepath)
+    save(saveFilepath, 'manualTrackingList');
 end

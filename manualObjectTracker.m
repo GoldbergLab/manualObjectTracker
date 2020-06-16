@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 09-Jun-2020 12:45:30
+% Last Modified by GUIDE v2.5 12-Jun-2020 16:00:16
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -50,7 +50,9 @@ function manualObjectTracker_OpeningFcn(hObject, ~, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to manualObjectTracker (see VARARGIN)
-handles.version = '1.14';
+handles.version = '1.14.1';
+
+ensureMOTIsOnPath()
 
 switch nargin
     case 4
@@ -176,6 +178,25 @@ updateDisplay(hObject);
 % UIWAIT makes manualObjectTracker wait for user response (see UIRESUME)
 %uiwait(handles.figure1);
 
+function ensureMOTIsOnPath()
+% Thanks to Jan on MATLAB Answers: https://www.mathworks.com/matlabcentral/answers/86740-how-can-i-determine-if-a-directory-is-on-the-matlab-path-programmatically#answer_96295
+MOTPath = mfilename('fullpath');
+[MOTDir, MOTName, MOTExt] = fileparts(MOTPath);
+if ~isempty(MOTPath)
+    pathCell = regexp(path, pathsep, 'split');
+    if ispc  % Windows is not case-sensitive
+      onPath = any(strcmpi(MOTDir, pathCell));
+    else
+      onPath = any(strcmp(MOTDir, pathCell));
+    end
+    if ~onPath
+        choice = questdlg('manualObjectTracker does not appear to be in your MATLAB path - would you like to add it now?','Add to path?', 'Add to path','Continue without adding to path','Add to path');
+        if strcmp(choice, 'Add to path')
+            addpath(MOTDir);
+        end
+    end
+end
+
 function videoDependentControlEnableState(handles, enabledState)
 set(handles.saveROIs, 'Enable', enabledState);
 set(handles.loadROIs, 'Enable', enabledState);
@@ -277,10 +298,12 @@ function unloadVideoOrImage(hObject)
 handles = guidata(hObject);
 disp('unloadVideoOrImage');
 % Reset all ROI data
-[handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
-[handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
-[handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
-handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
+if any(strcmp(handles.currUser, fieldnames(handles.ROIData)))
+    [handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
+    [handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
+    [handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
+    handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
+end
 handles.k = 1;
 guidata(hObject, handles);
 updateDisplay(hObject);
@@ -1253,8 +1276,13 @@ if ~prerandomizedTrackingMode
     end
 else
     [videoFilename, ~] = getPrerandomizedAnnotationNameAndFrameNumber(handles, previous);
-    [PathName, FileNameMinusExtension, Extension] = fileparts(videoFilename);
-    FileName = [FileNameMinusExtension, Extension];
+    if ~isempty(videoFilename)
+        [PathName, FileNameMinusExtension, Extension] = fileparts(videoFilename);
+        FileName = [FileNameMinusExtension, Extension];
+    else
+        PathName = '';
+        FileName = '';
+    end
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -1310,7 +1338,7 @@ if isPrerandomizedTrackingModeOn(handles)
     updateListBox(hObject, []);
     % Get a
     if ~isempty(folder)
-        matFileList = findFilesByRegex('.', '.*\.mat', false, false);
+        matFileList = findFilesByRegex(folder, '.*\.mat', false, false);
         if length(matFileList) == 0
             % No mat files found
             warndlg('No prerandomized file lists found. Please create one or choose a directory that contains one.');
@@ -1353,6 +1381,9 @@ if isempty(currentPath)
     currentPath = handles.defaultPath;
 end
 PathName = uigetdir(currentPath,'Select a directory containing video or image files');
+if PathName == 0
+    return;
+end
 %fullfile(PathName, FileName)
 handles.defaultPath = PathName;
 set(handles.currentDirectory, 'String', PathName);
@@ -1712,13 +1743,16 @@ end
 set(handles.prerandomizedAnnotationVideoListbox, 'String', listboxVideoNames);
 currentVideoFilenameIndex = get(handles.prerandomizedAnnotationVideoListbox, 'Value');
 frameNumDisplayList = {};
-for frameNum = handles.prerandomizedAnnotationInfo(currentVideoFilenameIndex).frameNumbers
-    if isFrameAnnotated(handles, frameNum)
-        annotationMark = [' ', char(10003)];
-    else
-        annotationMark = '';
+
+if ~isempty(handles.prerandomizedAnnotationInfo)
+    for frameNum = handles.prerandomizedAnnotationInfo(currentVideoFilenameIndex).frameNumbers
+        if isFrameAnnotated(handles, frameNum)
+            annotationMark = [' ', char(10003)];
+        else
+            annotationMark = '';
+        end
+        frameNumDisplayList{end+1} = [' ', num2str(frameNum), annotationMark];
     end
-    frameNumDisplayList{end+1} = [' ', num2str(frameNum), annotationMark];
 end
 set(handles.prerandomizedAnnotationFrameNumListbox, 'String', frameNumDisplayList);
 
@@ -1737,10 +1771,16 @@ set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'off');
 [proceed, handles] = warnIfLosingROIChanges(handles);
 if proceed
     [PathName, FileName] = getCurrentVideoFileSelection(handles);
-    disp('Loading video...')
-    disp(['Loading file: ', fullfile(PathName, FileName)])
-    loadVideoOrImage(hObject, fullfile(PathName, FileName));
-    disp('...video load complete')
+    if ~isempty(FileName)
+        disp('Loading video...')
+        disp(['Loading file: ', fullfile(PathName, FileName)])
+        loadVideoOrImage(hObject, fullfile(PathName, FileName));
+        disp('...video load complete')
+    else
+        guidata(hObject, handles);
+        unloadVideoOrImage(hObject);
+        handles = guidata(hObject);
+    end
     set(handles.prerandomizedAnnotationVideoListbox, 'UserData', get(handles.prerandomizedAnnotationVideoListbox, 'Value'));
 else
     set(handles.prerandomizedAnnotationVideoListbox, 'Value', get(handles.prerandomizedAnnotationVideoListbox, 'UserData'));
@@ -1780,7 +1820,7 @@ else
 end
 
 frameNumberIndex = get(handles.prerandomizedAnnotationFrameNumListbox,'Value');
-if isnumeric(videoFilenameIndex)
+if isnumeric(videoFilenameIndex) && ~isempty(handles.prerandomizedAnnotationInfo)
     videoFilename = handles.prerandomizedAnnotationInfo(videoFilenameIndex).videoFilename;
     if isnumeric(frameNumberIndex)
         frameNumber = handles.prerandomizedAnnotationInfo(videoFilenameIndex).frameNumbers(frameNumberIndex);
@@ -1801,16 +1841,30 @@ if isempty(get(handles.currentDirectory, 'String'))
    return
 end
 
-if ~isempty(varargin)
+if ~isempty(varargin) 
     prerandomizedAnnotationFilepath = varargin{1};
+else
+    prerandomizedAnnotationFilepath = '';
+end
+
+if ~isempty(prerandomizedAnnotationFilepath)
     handles.prerandomizedAnnotationFilepath = prerandomizedAnnotationFilepath;
+    invalidFile = false;
     try
         disp('loading annotation file...')
         s = load(prerandomizedAnnotationFilepath, 'manualTrackingList');
+        invalidFile = false;
+        if ~isfield(s, 'manualTrackingList') || ~isfield(s.manualTrackingList, 'videoFilename') || ~isfield(s.manualTrackingList, 'frameNumbers')
+            invalidFile = true;
+            error('Invalid pre-randomized annotation list file')
+        end
         disp('...done loading annotation file')
         drawnow
     catch
-        disp(['Load pre-randomized annotation file failed for file ', prerandomizedAnnotationFilepath]);
+        disp(['Load pre-randomized annotation list file failed for file ', prerandomizedAnnotationFilepath]);
+        if invalidFile
+            disp('Invalid file format')
+        end
     end
     handles.prerandomizedAnnotationInfo = [];
     set(handles.prerandomizedAnnotationFrameNumListbox, 'String', {'Loading...'});
@@ -2254,7 +2308,7 @@ function assemblePrerandomizedAnnotations_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 [proceed, handles] = warnIfLosingROIChanges(handles);
-p = assembleRandomManualTrackingAnnotationsGUI({handles.prerandomizedAnnotationFilepath, get(handles.currentDirectory, 'String'), 'assembledRandomFrames'});
+p = assembleRandomManualTrackingAnnotationsGUI({get(handles.currentDirectory, 'String'), 'assembledRandomFrames'});
 if p.complete
     msgbox(['Assembling random manual tracking annotations is complete. You can find your file at ', p.saveFilepath], 'Done assembling random manual tracking annotations.');
 end
@@ -2269,14 +2323,30 @@ p = generateRandomManualTrackingListGUI();
 if isempty(p)
     return;
 end
+if ~exist(p.clipDirectory, 'dir')
+    try
+        disp('Clip directory not found - attempting to create it')
+        mkdir(p.clipDirectory)
+    catch ME
+        disp(ME)
+        disp(['Failed to create clip directory ', p.clipDirectory])
+        warndlg(['Failed to create clip directory ', p.clipDirectory], 'Failed to create directory')
+        return
+    end
+end
 generateRandomManualTrackingList(p.videoRootDirectories, ...
     p.videoRegex, ...
     p.videoExtensions, ...
     p.numAnnotations, ...
-    p.saveFilename, ...
+    p.saveFilepath, ...
     p.clipDirectory, ...
-    p.clipRadius);
+    p.clipRadius, ...
+    p.recursiveSearch);
 %set(handles.choosePrerandomizedAnnotationFile,'Enable','on')
 set(handles.currentDirectory, 'String', p.clipDirectory);
-choosePrerandomizedAnnotationFile(hObject, eventdata, handles, p.saveFilename);
-msgbox('Generating random manual tracking list is complete! You may now annotate the randomly selected videos or clips.', 'Generation complete.');
+choosePrerandomizedAnnotationFile(hObject, eventdata, handles, p.saveFilepath);
+msgbox({'Generating random manual tracking list is complete!', ...
+        'You may now annotate the randomly selected videos or clips. ', ...
+        ['You can find the clips in: ', p.clipDirectory], ...
+        ['You can find the random annotation list file at: ', p.saveFilepath]}, ...
+        'Generation complete.');
