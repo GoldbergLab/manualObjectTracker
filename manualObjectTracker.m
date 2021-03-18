@@ -724,13 +724,15 @@ guidata(hObject, handles);
 function [x, y] = shiftLastNonclosingPoint(deltaX, deltaY, x, y)
 % shift last ROI point that is not a closing point (the same as the
 %   starting point) by delta in the x and y directions
-if x(end) == x(1) && y(end) == y(1)
-    index = length(x)-1;
-else
-    index = length(x);
+if ~isempty(x)
+    if x(end) == x(1) && y(end) == y(1)
+        index = length(x)-1;
+    else
+        index = length(x);
+    end
+    x(index) = x(index) + deltaX;
+    y(index) = y(index) + deltaY;
 end
-x(index) = x(index) + deltaX;
-y(index) = y(index) + deltaY;
 
 function closed = isROIClosed(x, y)
 % Check if the ROI specified by a list of x and y coordinates is closed
