@@ -714,9 +714,9 @@ function shiftCurrentPoint(hObject, deltaX, deltaY)
 % shift last ROI point by delta in x and y directions
 handles = guidata(hObject);
 if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-    [handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k}] = shiftLastNonclosingPoint(deltaX, deltaY, handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k});
+    [handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k}] = shiftLastNonclosingPoint(deltaX, deltaY, handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k});
 else
-    [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = shiftLastNonclosingPoint(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
+    [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}] = shiftLastNonclosingPoint(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k});
 end
 handles = noteThatChangesNeedToBeSaved(handles);
 guidata(hObject, handles);
