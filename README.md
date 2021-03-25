@@ -12,6 +12,10 @@ manualObjectTracker was developed with and for MATLAB R2017a. Use it with other 
 4. In the command window, type ```manualObjectTracker```
 5. Off you go.
 
+## Usage
+
+See the [User Manual](Documentation/UserManual.md)
+
 ## Contributing
 Contact Brian Kardon at bmk27 (at) cornell (dot) edu
 
