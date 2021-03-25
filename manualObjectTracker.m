@@ -591,6 +591,7 @@ switch EventData.Key
                     if ~isempty(handles.copiedROIDataX{nr})
                         handles.ROIData.(handles.currUser).xFreehands{nr, handles.k} = handles.copiedROIDataX{nr};
                         handles.ROIData.(handles.currUser).yFreehands{nr, handles.k} = handles.copiedROIDataY{nr};
+                        handles = noteThatChangesNeedToBeSaved(handles);
                     end
                 end
                 guidata(hObject, handles);
