@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 12-Jun-2020 16:00:16
+% Last Modified by GUIDE v2.5 26-Apr-2021 12:47:59
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -85,13 +85,18 @@ handles.showAllUserData = false;
 handles.copiedROIDataX = [];
 handles.copiedROIDataY = [];
 
+% Temporary points to show segment before placing
+handles.temporaryX = [];
+handles.temporaryY = [];
+handles.showTemporarySegment = true;
+
 % Initialize flag to monitor whether data needs to be saved
 handles.storingChangedDataSinceLastSave = false;
 
 % Create empty image to prepare image object
 handles.hImage = imagesc([], 'Parent', handles.axes1, 'Clipping', 'off');
 set(handles.hImage, 'ButtonDownFcn', @imageButtonDown);
-axis(handles.axes1, 'image');
+axis(handles.axes1, 'manual');
 handles.axes1.Visible = 'off';
 colormap(handles.axes1, 'gray');
 caxis(handles.axes1, 'manual');
@@ -108,6 +113,7 @@ handles.autoApplyScaleDataToNewImages = true;
 handles.hROI.(handles.currUser) = newUserROIHandleData;
 
 set(hObject, 'WindowKeyPressFcn', {@KeyPress, hObject});
+set(hObject, 'WindowKeyReleaseFcn', {@KeyRelease, hObject});
 
 %set(handles.jumpToFrameBox, 'keyPressFcn', @jumpToFrameBox_keyPressFcn);
 
@@ -137,6 +143,11 @@ handles.currentlyFreehandDrawing = false;
 handles.zooming = false;
 handles.zoomStart = [];
 handles.zoomBoxHandle = [];
+handles.zoomCenter = NaN;
+handles.zoomFactor = 1;
+
+% Track status of shift key
+handles.shiftDown = false;
 
 % Handles when the "current directory" is modified
 handles.currentDirectoryListener = addlistener(handles.currentDirectory, 'Value', 'PostSet', @(src, evnt)currentDirectory_Callback(hObject, evnt, NaN));
@@ -280,11 +291,11 @@ function [userROIHandleData, handles] = createNewUserROIHandleData(handles, u)
 hold(handles.axes1, 'on')
 for n = 1:handles.numROIs
     userROIHandleData.ROIPointHandles{n} = line(handles.axes1, NaN,NaN);
-    set(userROIHandleData.ROIPointHandles{n}, 'HitTest', 'off', 'DisplayName', [u, ' points'], 'Clipping', 'off');
+    set(userROIHandleData.ROIPointHandles{n}, 'DisplayName', [u, ' points'], 'Clipping', 'off', 'ButtonDownFcn', @imageButtonDown);
     userROIHandleData.ROIFreehandHandles{n} = line(handles.axes1, NaN,NaN);
-    set(userROIHandleData.ROIFreehandHandles{n}, 'HitTest', 'off', 'DisplayName', [u, ' freehand'], 'Clipping', 'off');
+    set(userROIHandleData.ROIFreehandHandles{n}, 'DisplayName', [u, ' freehand'], 'Clipping', 'off', 'ButtonDownFcn', @imageButtonDown);
     userROIHandleData.absentDataIndicatorHandles{n} = text(handles.axes1, 'String', '', 'Position', [NaN,NaN], 'Units', 'characters');
-    set(userROIHandleData.absentDataIndicatorHandles{n}, 'HitTest', 'off');
+    set(userROIHandleData.absentDataIndicatorHandles{n}, 'ButtonDownFcn', @imageButtonDown);
 end
 userROIHandleData.projectedTongueHandle = line(handles.axes1, NaN, NaN);
 set(userROIHandleData.projectedTongueHandle, 'HitTest', 'off', 'Color', 'blue', 'Marker', 'o', 'DisplayName', [u, ' proj'], 'Clipping', 'off');
@@ -378,6 +389,8 @@ end
 [handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
 handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
 handles.k = 1;
+handles.zoomCenter = flip(size(handles.videoData(:, :, 1))/2);
+handles.zoomFactor = 1;
 videoDependentControlEnableState(handles, 'on')
 guidata(hObject, handles);
 %updateDisplay(hObject);
@@ -492,13 +505,26 @@ switch get(handles.modeButtonGroup.SelectedObject, 'String')
         set(handles.pointModeButton, 'Value', 1);
     case 'Point'
         set(handles.freehandModeButton, 'Value', 1);
+    case 'Rectangle'
+        set(handles.freehandModeButton, 'V
 end    
 guidata(hObject, handles);
+
+function KeyRelease(~, EventData, hObject, ~)
+handles = guidata(hObject);
+switch EventData.Key
+    case 'shift'
+        handles.shiftDown = false;
+        guidata(hObject, handles);
+end
 
 function KeyPress(~, EventData, hObject, ~)
 % Handle various key press events
 handles = guidata(hObject);
 switch EventData.Key
+    case 'shift'
+        handles.shiftDown = true;
+        guidata(hObject, handles);
     case cellfun(@(x) num2str(x), num2cell(1:handles.numROIs), 'UniformOutput', false)
         % Switch which ROI is active
         handles = setActiveROINum(handles, str2double(EventData.Key));
@@ -518,13 +544,22 @@ switch EventData.Key
             guidata(hObject, handles);
         else
             % a = Reset zoom to default
-            axis(handles.axes1, 'image')
+            frameSize = flip(size(handles.videoData(:, :, 1)));
+            handles.zoomCenter = frameSize/2;
+            handles.zoomFactor = 1;
+            guidata(hObject, handles);
         end
     case 'z'
         if any(strcmp(EventData.Modifier, 'control'))
             % ctl-z = undo last ROI point
             undoButton_Callback(hObject, NaN, handles)
         end
+    case 'd'
+        coordinates = get(handles.axes1, 'CurrentPoint');
+        x = round(coordinates(1, 1));
+        y = round(coordinates(1, 2));
+        handles = addPoint(x, y, handles);
+        guidata(hObject, handles);
     case 'delete'
         if any(strcmp(EventData.Modifier, 'shift'))
             % shift-del = clear all points in all ROIs
@@ -591,6 +626,7 @@ switch EventData.Key
                     if ~isempty(handles.copiedROIDataX{nr})
                         handles.ROIData.(handles.currUser).xFreehands{nr, handles.k} = handles.copiedROIDataX{nr};
                         handles.ROIData.(handles.currUser).yFreehands{nr, handles.k} = handles.copiedROIDataY{nr};
+                        handles = noteThatChangesNeedToBeSaved(handles);
                     end
                 end
                 guidata(hObject, handles);
@@ -852,7 +888,12 @@ end
 % Display the current video frame
 frame = handles.videoData(:, :, k);
 frameSize = size(frame);
+% axis(handles.axes1, [1, frameSize(2), 1, frameSize(1)]);
+% axis(handles.axes1, 'equal');
+zoom(handles.axes1, [frameSize(2), frameSize(1)], handles.zoomCenter, handles.zoomFactor);
+
 set(handles.hImage, 'CData', frame);
+
 
 % Update ROI stats display
 handles = updateROIStatDisplay(handles);
@@ -881,9 +922,39 @@ for userIndex = 1:length(users)
             set(handles.hROI.(u).ROIPointHandles{n}, ...
                 'XData', handles.ROIData.(u).xPoints{n, k}, ...
                 'YData', handles.ROIData.(u).yPoints{n, k});
-            set(handles.hROI.(u).ROIFreehandHandles{n}, ...
-                'XData', handles.ROIData.(u).xFreehands{n, k}, ...
-                'YData', handles.ROIData.(u).yFreehands{n, k});
+            
+            if n == handles.activeROINum
+                % This is the current ROI
+                if handles.shiftDown
+                    % Shift is down - draw temporary mouse point
+                    switch get(handles.modeButtonGroup.SelectedObject, 'String')
+                        case 'Freehand'
+                            set(handles.hROI.(u).ROIFreehandHandles{n}, ...
+                                'XData', [handles.ROIData.(u).xFreehands{n, k}, handles.temporaryX], ...
+                                'YData', [handles.ROIData.(u).yFreehands{n, k}, handles.temporaryY]);
+                        case 'Rectangle'
+                            if length(handles.ROIData.(u).xFreehands{n, k}) == 1
+                                % One rectangle point is down, we can draw
+                                % a temporary rectangle
+                                startX = handles.ROIData.(u).xFreehands{n, k};
+                                startY = handles.ROIData.(u).yFreehands{n, k};
+                                set(handles.hROI.(u).ROIFreehandHandles{n}, ...
+                                    'XData', [startX, startX, handles.temporaryX, handles.temporaryX, startX], ...
+                                    'YData', [startY, handles.temporaryY, handles.temporaryY, startY, startY]);
+                            end
+                    end
+                else
+                    % Shift is not down - do not draw temporary mouse point
+                    set(handles.hROI.(u).ROIFreehandHandles{n}, ...
+                        'XData', [handles.ROIData.(u).xFreehands{n, k}], ...
+                        'YData', [handles.ROIData.(u).yFreehands{n, k}]);
+                end
+            else
+                set(handles.hROI.(u).ROIFreehandHandles{n}, ...
+                    'XData', handles.ROIData.(u).xFreehands{n, k}, ...
+                    'YData', handles.ROIData.(u).yFreehands{n, k});
+            end
+                
             color = colors{mod(n-1, 6)+1};
             set(handles.hROI.(u).ROIPointHandles{n}, 'LineStyle', 'none', 'Marker', '*', 'Color', color);
             set(handles.hROI.(u).ROIFreehandHandles{n}, 'Marker', 'none',  'Color', color);
@@ -930,6 +1001,31 @@ if isPrerandomizedTrackingModeOn(handles)
     updatePrerandomizedAnnotationListboxes(handles);
 end
 
+function handles = addPoint(x, y, handles)
+k = handles.k;
+switch get(handles.modeButtonGroup.SelectedObject, 'String')
+    case 'Freehand'
+        [handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k}] ...
+            = getUpdatedCoords(x, y, handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k}, get(handles.autocloseROI, 'Value'));
+    case 'Rectangle'
+        xCoords = handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k};
+        yCoords = handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k};
+        if isempty(xCoords) || length(xCoords) > 1
+            % No points yet, this is the first corner, or both corners
+            % already set (start over)
+            handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k} = x;
+            handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k} = y;
+        else
+            % One corner already set, add another. If other points exist,
+            % wipe them.
+            handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k} = [xCoords(1), xCoords(1), x, x, xCoords(1)];
+            handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k} = [yCoords(1), y, y, yCoords(1), yCoords(1)];
+        end
+    case 'Point'
+        [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, k}] ...
+            = getUpdatedCoords(x, y, handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, k}, get(handles.autocloseROI, 'Value'));
+end
+
 function imageButtonDown(hObject, ~)
 % Handle mouse clicks on the video frame image
 handles = guidata(hObject);
@@ -943,15 +1039,9 @@ x = round(coordinates(1, 1));
 y = round(coordinates(1, 2));
 
 switch get(handles.figure1, 'SelectionType')
-    case 'normal'
+    case {'normal', 'extend'}
         if ~warnDataAbsent(handles, k, handles.activeROINum, handles.currUser)
-            if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-                [handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k}] ...
-                    = getUpdatedCoords(x, y, handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, k}, get(handles.autocloseROI, 'Value'));
-            else
-                [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, k}] ...
-                    = getUpdatedCoords(x, y, handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, k}, get(handles.autocloseROI, 'Value'));
-            end
+            handles = addPoint(x, y, handles);
             % Check if freehand mode is on and freehand drawing has not begun
             if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand') && ~handles.currentlyFreehandDrawing
                 % Start freehand drawing
@@ -959,38 +1049,37 @@ switch get(handles.figure1, 'SelectionType')
             end
             handles = noteThatChangesNeedToBeSaved(handles);
         end
-%    case {'extend', 'open'}
-%        % Zoom out
-%        zoom(handles.axes1, [x, y], 2)
-    case 'alt'
-%        zoom(handles.axes1, [x, y], 0.5)
-        % initiate or end zoom
-        if ~handles.zooming
-            % Start zooming
-            handles.zooming = true;
-            handles.zoomStart = [x, y];
-        else
-            % Stop zooming, execute zoom
-            handles.zooming = false;
-            dx = x - handles.zoomStart(1);
-            dy = y - handles.zoomStart(2);
-            axis_dx = handles.axes1.XLim(2) - handles.axes1.XLim(1);
-            axis_dy = handles.axes1.YLim(2) - handles.axes1.YLim(1);
-            xRatio = abs(dx/axis_dx);
-            yRatio = abs(dy/axis_dy);
-            zoomRatio = min([xRatio, yRatio]);
-            center = [mean([x, handles.zoomStart(1)]), mean([y, handles.zoomStart(2)])];
-            if dy > 0
-                % Zoom out
-                zoom(handles.axes1, center, zoomRatio);
-            else
-                % Zoom in
-                zoom(handles.axes1, center, 1/zoomRatio);
-            end
-        end
 end
 guidata(hObject, handles);
 updateDisplay(hObject);
+
+function handles = updateZoomBox(handles, x, y)
+if ~handles.zooming
+    % Start zooming
+    handles.zooming = true;
+    handles.zoomStart = [x, y];
+else
+    % Stop zooming, execute zoom
+    handles.zooming = false;
+    dx = x - handles.zoomStart(1);
+    dy = y - handles.zoomStart(2);
+    axis_dx = handles.axes1.XLim(2) - handles.axes1.XLim(1);
+    axis_dy = handles.axes1.YLim(2) - handles.axes1.YLim(1);
+    xRatio = abs(dx/axis_dx);
+    yRatio = abs(dy/axis_dy);
+    zoomRatio = min([xRatio, yRatio]);
+    center = [mean([x, handles.zoomStart(1)]), mean([y, handles.zoomStart(2)])];
+    handles.zoomCenter = center;
+    if dy > 0
+        % Zoom out
+        handles.zoomFactor = handles.zoomFactor * zoomRatio;
+%         zoom(handles.axes1, center, zoomRatio);
+    else
+        % Zoom in
+        handles.zoomFactor = handles.zoomFactor / zoomRatio;
+%         zoom(handles.axes1, center, 1/zoomRatio);
+    end
+end
 
 function [xCoords, yCoords] = getUpdatedCoords(xClick, yClick, xCoords, yCoords, autoClose)
 % Based on current ROI coordinates xCoords and yCoords, new click
@@ -1030,7 +1119,7 @@ if handles.currentlyFreehandDrawing
 end
 guidata(hObject, handles);
 
-function mouseMotionHandler(hObject, ~)
+function mouseMotionHandler(hObject, evt)
 % Handle mouse motion events
 handles = guidata(hObject);
 %mouseButton = get(handles.figure1, 'SelectionType');
@@ -1046,7 +1135,8 @@ if handles.sliding
     nextK = round(val*(handles.numFrames-1))+1;
     deltaK = round((nextK - handles.k));
     changeFrame(NaN, NaN, hObject, 'delta', deltaK);
-elseif handles.currentlyFreehandDrawing
+end
+if handles.currentlyFreehandDrawing
     % User is currently freehand drawing
     pt = get(handles.axes1, 'CurrentPoint');
     x = pt(1, 1);
@@ -1060,7 +1150,8 @@ elseif handles.currentlyFreehandDrawing
         guidata(hObject, handles);
         updateDisplay(hObject);
     end
-elseif handles.zooming
+end
+if handles.zooming
     % If currently zooming, display zoom box
     handles = guidata(hObject);
      coordinates = get(handles.axes1, 'CurrentPoint');
@@ -1080,6 +1171,15 @@ elseif handles.zooming
     end
     guidata(hObject, handles);
 end
+if handles.showTemporarySegment
+    pt = get(handles.axes1, 'CurrentPoint');
+    x = pt(1, 1);
+    y = pt(1, 2);
+    handles.temporaryX = x;
+    handles.temporaryY = y;
+    guidata(hObject, handles);
+    updateDisplay(hObject);
+end
 
 function absentFlag = warnDataAbsent(handles, k, n, u)
 % Check if user is trying to draw an ROI that has already been marked
@@ -1096,20 +1196,33 @@ else
     absentFlag = false;
 end
 
-function zoom(axesHandle, center, factor)
+function zoom(axesHandle, fullSize, center, factor)
 % Zoom in or out on axes based on center coordinates, and a zoom factor
 % factor > 1 = zoom out
 % factor < 1 = zoom in
-%axesHandle.Clipping = 'off';
-fxl = xlim(axesHandle);
-fyl = ylim(axesHandle);
+fxl = [1, fullSize(1)];
+fyl = [1, fullSize(2)];
 fw = fxl(2) - fxl(1);
 fh = fyl(2) - fyl(1);
-% zoom out
+% zoom
+axesAspectRatio = axesHandle.Position(3)/axesHandle.Position(4);
+fw = fh * axesAspectRatio;
 fxl = [center(1)-factor*fw/2, center(1)+factor*fw/2];
 fyl = [center(2)-factor*fh/2, center(2)+factor*fh/2];
-xlim(axesHandle, fxl);
-ylim(axesHandle, fyl);
+zoomAspectRatio = fw/fh;
+% axis(axesHandle, 'equal');
+if axesAspectRatio > zoomAspectRatio
+    % Axes are wider than the zoom box
+    xlim(axesHandle, fxl);
+    ylim(axesHandle, fyl);
+else
+    % Zoom box is wider than the axes
+    xlim(axesHandle, fxl);
+    ylim(axesHandle, fyl);
+end
+daspect(axesHandle, [1, 1, 1]);
+axis(axesHandle, 'manual');
+
 
 % --- Outputs from this function are returned to the command line.
 function varargout = manualObjectTracker_OutputFcn(hObject, ~, ~)
@@ -1141,12 +1254,13 @@ end
 for n = roiNum
     for k = frameNum
         if n <= handles.numROIs && k <= handles.numFrames
-            if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-                handles.ROIData.(handles.currUser).xFreehands{n, k} = [];
-                handles.ROIData.(handles.currUser).yFreehands{n, k} = [];
-            else
-                handles.ROIData.(handles.currUser).xPoints{n, k} = [];
-                handles.ROIData.(handles.currUser).yPoints{n, k} = [];
+            switch get(handles.modeButtonGroup.SelectedObject, 'String')
+                case {'Freehand', 'Rectangle'}
+                    handles.ROIData.(handles.currUser).xFreehands{n, k} = [];
+                    handles.ROIData.(handles.currUser).yFreehands{n, k} = [];
+                case 'Point'
+                    handles.ROIData.(handles.currUser).xPoints{n, k} = [];
+                    handles.ROIData.(handles.currUser).yPoints{n, k} = [];
             end
         end
     end
@@ -1162,12 +1276,13 @@ function undoButton_Callback(hObject, ~, handles)
 if handles.numFrames == 0
     return;
 end
-if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-    handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}(1:end-1);
-    handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k}(1:end-1);
-else
-    handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}(1:end-1);
-    handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}(1:end-1);
+switch get(handles.modeButtonGroup.SelectedObject, 'String')
+    case {'Freehand', 'Rectangle'}
+        handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}(1:end-1);
+        handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k}(1:end-1);
+    case 'Point'
+        handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}(1:end-1);
+        handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}(1:end-1);
 end
 handles = noteThatChangesNeedToBeSaved(handles);
 guidata(hObject, handles);
@@ -1607,10 +1722,11 @@ end
 
 [proceed, handles] = warnIfLosingROIChanges(handles);
 if proceed
-    if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-        [handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
-    else
-        [handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
+    switch get(handles.modeButtonGroup.SelectedObject, 'String')
+        case {'Freehand', 'Rectangle'}
+            [handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
+        case 'Point'
+            [handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
     end
     handles = noteThatChangesDoNotNeedToBeSaved(handles);
     guidata(hObject, handles);
@@ -1647,12 +1763,13 @@ function closeROI_Callback(hObject, ~, handles)
 % hObject    handle to closeROI (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-    [handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k}] ...
-        = closeROI(handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k});
-else
-    [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}] ...
-        = closeROI(handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k});
+switch get(handles.modeButtonGroup.SelectedObject, 'String')
+    case 'Freehand'
+        [handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k}] ...
+            = closeROI(handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k});
+    case 'Point'
+        [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}] ...
+            = closeROI(handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k});
 end
 handles = noteThatChangesNeedToBeSaved(handles);
 guidata(hObject, handles);
@@ -2057,7 +2174,7 @@ filteredListOfStrings = listOfStrings(filteredIndices);
 
 function helpdialog(handles)
     % Adapted from https://www.mathworks.com/help/matlab/ref/dialog.html
-    d = dialog('Position',[10 100 650 500],'Name','Manual Object Tracker help');
+    d = dialog('Position',[10 100 650 650],'Name','Manual Object Tracker help');
     helpText = {
         ['manualObjectTracker version ', handles.version], ...
         '', ...
@@ -2073,8 +2190,9 @@ function helpdialog(handles)
         '  space            - play/pause video'  ...
         '  ctl-z            - undo last point of current ROI', ...
         '  delete           - clear all points for current ROI', ...
-        '  shift-delete           - clear all points for all ROIs in current frame', ...
+        '  shift-delete     - clear all points for all ROIs in current frame', ...
         '  c                - close the ROI', ...
+        '  d                - drop point at mouse (allows dropping off canvas)', ...
         '  shift-n          - mark current ROI as "no tongue"', ...
         '  n                - mark all ROIs as "no tongue"', ...
         '  left arrow       - back 1 frame', ...
@@ -2087,9 +2205,10 @@ function helpdialog(handles)
         '  w                - switch to the next video in the list', ...
         '  m                - add a measuring tool (right click to delete)', ...
         '  ctl-c            - copy current ROI', ...
-        '  ctl-shift-c      - copy all ROIs inm', ...
-        '  ctl-v            - past ROI', ...
-        '  ctl-shift-v      - past ROI', ...
+        '  ctl-shift-c      - copy all ROIs in this frame', ...
+        '  ctl-v            - paste copied ROI, overwriting current ROI', ...
+        '  ctl-shift-v      - paste all copied ROIs, potentially overwriting', ...
+        '                     all ROIs in this frame', ...
         '', ...
         '  Written by Brian Kardon bmk27@cornell.edu 2018'...
         '', ...
@@ -2097,7 +2216,7 @@ function helpdialog(handles)
         };
     txt = uicontrol('Parent',d,...
                'Style','text',...
-               'Position',[20 -60 600 550],...
+               'Position',[20 -60 600 700],...
                'FontSize', 10,...
                'HorizontalAlignment', 'left',...
                'String',helpText,...
@@ -2327,10 +2446,11 @@ handles = guidata(hObject);
 answer = inputdlg('Enter the angle to rotate in degrees (positive = cw, negative = ccw)','Rotate active ROI');
 if ~isempty(answer)
     theta = str2double(answer);
-    if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-        [handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k}] = rotateROI(theta, handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k});
-    else
-        [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = rotateROI(theta, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
+    switch get(handles.modeButtonGroup.SelectedObject, 'String')
+        case 'Freehand'
+            [handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k}] = rotateROI(theta, handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k});
+        case 'Point'
+            [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = rotateROI(theta, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
     end
     handles = noteThatChangesNeedToBeSaved(handles);
     guidata(hObject, handles);
@@ -2346,10 +2466,11 @@ handles = guidata(hObject);
 answer = inputdlg('Enter the factor by which to scale the active ROI (>1 ==> larger, <1 ==> smaller)','Scale active ROI');
 if ~isempty(answer)
     scale = str2double(answer);
-    if strcmp(get(handles.modeButtonGroup.SelectedObject, 'String'), 'Freehand')
-        [handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k}] = scaleROI(scale, handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k});
-    else
-        [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = scaleROI(scale, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
+    switch get(handles.modeButtonGroup.SelectedObject, 'String')
+        case 'Freehand'
+            [handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k}] = scaleROI(scale, handles.ROIData.(handles.currUser).xFreehands{handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.k});
+        case 'Point'
+            [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = scaleROI(scale, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
     end
     handles = noteThatChangesNeedToBeSaved(handles);
     guidata(hObject, handles);
@@ -2427,3 +2548,25 @@ msgbox({'Generating random manual tracking list is complete!', ...
         ['You can find the clips in: ', p.clipDirectory], ...
         ['You can find the random annotation list file at: ', p.saveFilepath]}, ...
         'Generation complete.');
+
+
+% --- Executes on mouse press over figure background, over a disabled or
+% --- inactive control, or over an axes background.
+function figure1_WindowButtonDownFcn(hObject, eventdata, handles)
+% hObject    handle to figure1 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+switch get(handles.figure1, 'SelectionType')
+%    case {'extend', 'open'}
+%        % Zoom out
+%        zoom(handles.axes1, [x, y], 2)
+    case 'alt'
+%        zoom(handles.axes1, [x, y], 0.5)
+        % initiate or end zoom
+        coordinates = get(handles.axes1, 'CurrentPoint');
+        x = round(coordinates(1, 1));
+        y = round(coordinates(1, 2));
+        handles = updateZoomBox(handles, x, y);
+end
+guidata(hObject, handles);
+updateDisplay(hObject);
