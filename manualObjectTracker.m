@@ -388,8 +388,13 @@ end
 [handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
 handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
 handles.k = 1;
-handles.zoomCenter = flip(size(handles.videoData(:, :, 1))/2);
-handles.zoomFactor = 1;
+
+resetZoom = false;
+if resetZoom
+    handles.zoomCenter = flip(size(handles.videoData(:, :, 1))/2);
+    handles.zoomFactor = 1;
+end
+
 videoDependentControlEnableState(handles, 'on')
 guidata(hObject, handles);
 %updateDisplay(hObject);
