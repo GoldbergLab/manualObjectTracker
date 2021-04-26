@@ -311,7 +311,6 @@ userROIData.stats = createBlankStatsData(numFrames, numROIs);
 
 function unloadVideoOrImage(hObject)
 handles = guidata(hObject);
-disp('unloadVideoOrImage');
 % Reset all ROI data
 if any(strcmp(handles.currUser, fieldnames(handles.ROIData)))
     [handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
