@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 26-Apr-2021 12:47:59
+% Last Modified by GUIDE v2.5 11-Jun-2021 15:43:44
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -54,10 +54,28 @@ handles.version = '1.14.1';
 
 ensureMOTIsOnPath()
 
-switch nargin
-    case 4
+if nargin > 4
+    if iscell(varargin{2})
+        % User passed in list of ROI names
+        namesOfROIs = varargin{2};
+        numROIs = length(namesOfROIs);
+    else
+        % User passed in desired number of ROIs
+        numROIs = varargin{2};
+        namesOfROIs = repmat({''}, [1, numROIs]);
+    end
+else
+    % Default number of ROIs is 2
+    numROIs = 2;
+    namesOfROIs = repmat({''}, [1, numROIs]);
+end
+
+if nargin > 3
+    filename = varargin{1};
+    if ~isempty(filename)
         loadVideoOrImage(hObject, varargin{1});
         handles = guidata(hObject);
+    end
 end
 
 videoDependentControlEnableState(handles, 'off')
@@ -74,8 +92,10 @@ handles.numFrames = 0;
 handles.k = 1;
 handles.DEFAULT_USER = 'AnonymousUser';
 handles.currUser = handles.DEFAULT_USER;
-handles.numROIs = 2;  % Change this number to allow for a different # of ROIs per frame
+handles.numROIs = numROIs;  % Change this number to allow for a different # of ROIs per frame
 handles.activeROINum = 1;
+% Make default name mapping for ROIs
+handles.namesOfROIs = namesOfROIs;
 
 % Initialize x and y ROI data
 handles.ROIData.(handles.currUser) = createNewUserROIData(handles.numFrames, handles.numROIs);
@@ -253,11 +273,17 @@ else
     defaultROIFolder = fullfile(path, defaultROIFolderName);
 end
 
-
 function handles = setActiveROINum(handles, n)
 % Switch which ROI is currently active
 handles.activeROINum = n;
+handles = updateROIDisplay(handles, n);
+
+function handles = updateROIDisplay(handles, n)
+if ~exist('n', 'var')
+    n = handles.activeROINum;
+end
 set(handles.activeROINumDisplay, 'String', num2str(n));
+set(handles.activeROINameDisplay, 'String', handles.namesOfROIs{n});
 
 function handles = deleteUserROIHandleData(handles)
 % Delete all graphics object handles related to USER ROIs
@@ -390,7 +416,7 @@ handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFra
 handles.k = 1;
 
 resetZoom = false;
-if resetZoom
+if resetZoom || any(isnan(handles.zoomCenter))
     handles.zoomCenter = flip(size(handles.videoData(:, :, 1))/2);
     handles.zoomFactor = 1;
 end
@@ -1612,7 +1638,7 @@ if proceed
     [~, VideoFileName] = getCurrentVideoFileSelection(handles);
     [~, vname, ~] = fileparts(VideoFileName);
     if ~contains(data.outputStruct.videoFile, vname)
-        warndlg('Warning, filename stored in ROI mat file does not match the currently loaded video filename.');
+        warndlg('Warning, filename stored in ROI mat file does not match the currently loaded video filename. That should not normally happen.');
     end
     
     if ~isfield(data.outputStruct, 'manualObjectTrackerVersion')
@@ -1922,7 +1948,7 @@ mode = get(handles.prerandomizedTrackingModeButton, 'Value');
 
 function isAnnotated = isFrameAnnotated(handles, frameNum)
 isAnnotated = [false, false];
-for roiNum = 1:2
+for roiNum = 1:handles.numROIs
     if ~isempty(handles.ROIData.(handles.currUser).xFreehands)
         if ~isempty(handles.ROIData.(handles.currUser).xFreehands{roiNum, frameNum})
             isAnnotated(roiNum) = true;
@@ -2592,3 +2618,9 @@ switch get(handles.figure1, 'SelectionType')
 end
 guidata(hObject, handles);
 updateDisplay(hObject);
+
+function getNewNamesOfROIs(hObject, eventdata, handles)
+newNames = getUserMapping(arrayfun(@(x)num2str(x), 1:handles.numROIs, 'UniformOutput', false), 'ROI #', handles.namesOfROIs);
+handles.namesOfROIs = newNames;
+handles = updateROIDisplay(handles);
+guidata(hObject, handles)
