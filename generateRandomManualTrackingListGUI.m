@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 12-Jun-2020 14:45:27
+% Last Modified by GUIDE v2.5 24-Jun-2021 15:55:40
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -68,6 +68,13 @@ function varargout = generateRandomManualTrackingListGUI_OutputFcn(hObject, even
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+if isempty(handles.output)
+    disp('Closed without running. Please press "RUN" to generate randomized clips.');
+else
+    % Actually run thingy
+    generateRandomManualTrackingList(handles.output);
+end
 
 % Get default command line output from handles structure
 varargout{1} = handles.output;
@@ -247,6 +254,37 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+function trialAlignment = getTrialAlignment(handles)
+video = split2DCharArray(handles.videoAlignmentWithFPGA.String, @(row)str2double(row));
+fpga =  split2DCharArray(handles.FPGAAlignmentWithVideo.String, @(row)str2double(row));
+trialAlignment = struct();
+for k = 1:min([length(video), length(fpga)])
+    trialAlignment(k).fpgaStartingFrame = fpga(k);
+    trialAlignment(k).videoStartingFrame = video(k);
+end
+
+function lickStructFilePaths = getLickStructFilePaths(handles)
+lickStructFilePaths = split2DCharArray(handles.lickStructFilePaths.String);
+
+function videoRootDirectories = getVideoRootDirectories(handles)
+videoRootDirectories = split2DCharArray(handles.videoRootDirectories.String);
+
+function arr = split2DCharArray(arr, rowConverter)
+if ~exist('rowConverter', 'var')
+    rowConverter = @(x){strtrim(x)};
+end
+
+% It's been output as a 2d space-padded char array eyeroll
+numDirs = size(arr, 1);
+newArr = cell([1, numDirs]);
+for row = 1:numDirs
+    if row == 1
+        newArr = rowConverter(arr(row, :));
+    else
+        newArr(row) = rowConverter(arr(row, :));
+    end
+end
+arr = newArr;
 
 % --- Executes on button press in runButton.
 function runButton_Callback(hObject, eventdata, handles)
@@ -256,14 +294,20 @@ function runButton_Callback(hObject, eventdata, handles)
 saveFilename = 'randomizedAnnotationList.mat';
 
 output = struct();
-output.videoRootDirectories = handles.videoRootDirectories.String;
+output.videoRootDirectories = getVideoRootDirectories(handles);
 output.videoRegex = handles.videoRegex.String;
 output.videoExtensions = handles.videoExtensions.String;
 output.numAnnotations = str2double(handles.numAnnotations.String);
 output.clipDirectory = handles.clipDirectory.String;
 output.clipRadius = str2double(handles.clipRadius.String);
 output.saveFilepath = fullfile(output.clipDirectory, saveFilename);
-output.recursiveSearch = logical(get(handles.recursiveSearch, 'Value'));
+
+output.lickStructFilePaths = getLickStructFilePaths(handles);
+output.trialAlignment = getTrialAlignment(handles);
+output.weights.noTongue = str2double(handles.noTongueWeight.String);
+output.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
+output.weights.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
+
 handles.output = output;
 guidata(hObject, handles);
 figure1_CloseRequestFcn(handles.figure1, eventdata, handles)
@@ -281,11 +325,165 @@ else
     delete(hObject);
 end
 
-
-% --- Executes on button press in recursiveSearch.
-function recursiveSearch_Callback(hObject, eventdata, handles)
-% hObject    handle to recursiveSearch (see GCBO)
+function lickStructFilePaths_Callback(hObject, eventdata, handles)
+% hObject    handle to lickStructFilePaths (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hint: get(hObject,'Value') returns toggle state of recursiveSearch
+% Hints: get(hObject,'String') returns contents of lickStructFilePaths as text
+%        str2double(get(hObject,'String')) returns contents of lickStructFilePaths as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function lickStructFilePaths_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to lickStructFilePaths (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in LickStructBrowseButton.
+function LickStructBrowseButton_Callback(hObject, eventdata, handles)
+% hObject    handle to LickStructBrowseButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+
+
+function videoAlignmentWithFPGA_Callback(hObject, eventdata, handles)
+% hObject    handle to videoAlignmentWithFPGA (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of videoAlignmentWithFPGA as text
+%        str2double(get(hObject,'String')) returns contents of videoAlignmentWithFPGA as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function videoAlignmentWithFPGA_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to videoAlignmentWithFPGA (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in alignFPGAWithVideoButton.
+function alignFPGAWithVideoButton_Callback(hObject, eventdata, handles)
+% hObject    handle to alignFPGAWithVideoButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+
+
+function FPGAAlignmentWithVideo_Callback(hObject, eventdata, handles)
+% hObject    handle to FPGAAlignmentWithVideo (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of FPGAAlignmentWithVideo as text
+%        str2double(get(hObject,'String')) returns contents of FPGAAlignmentWithVideo as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function FPGAAlignmentWithVideo_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to FPGAAlignmentWithVideo (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function noTongueWeight_Callback(hObject, eventdata, handles)
+% hObject    handle to noTongueWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of noTongueWeight as text
+%        str2double(get(hObject,'String')) returns contents of noTongueWeight as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function noTongueWeight_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to noTongueWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function spoutContactWeight_Callback(hObject, eventdata, handles)
+% hObject    handle to spoutContactWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of spoutContactWeight as text
+%        str2double(get(hObject,'String')) returns contents of spoutContactWeight as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function spoutContactWeight_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to spoutContactWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function tongueNoContactWeight_Callback(hObject, eventdata, handles)
+% hObject    handle to tongueNoContactWeightLabel (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of tongueNoContactWeightLabel as text
+%        str2double(get(hObject,'String')) returns contents of tongueNoContactWeightLabel as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function tongueNoContactWeightLabel_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to tongueNoContactWeightLabel (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes during object creation, after setting all properties.
+function tongueNoContactWeight_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to tongueNoContactWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
