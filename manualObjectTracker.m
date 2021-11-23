@@ -54,14 +54,14 @@ handles.version = '1.14.1';
 
 ensureMOTIsOnPath()
 
-if nargin > 4
-    if iscell(varargin{2})
+if nargin >= 4
+    if iscell(varargin{1})
         % User passed in list of ROI names
-        namesOfROIs = varargin{2};
+        namesOfROIs = varargin{1};
         numROIs = length(namesOfROIs);
     else
         % User passed in desired number of ROIs
-        numROIs = varargin{2};
+        numROIs = varargin{1};
         namesOfROIs = repmat({''}, [1, numROIs]);
     end
 else
@@ -70,13 +70,13 @@ else
     namesOfROIs = repmat({''}, [1, numROIs]);
 end
 
-if nargin > 3
-    filename = varargin{1};
-    if ~isempty(filename)
-        loadVideoOrImage(hObject, varargin{1});
-        handles = guidata(hObject);
-    end
-end
+% if nargin > 3
+%     filename = varargin{1};
+%     if ~isempty(filename)
+%         loadVideoOrImage(hObject, varargin{1});
+%         handles = guidata(hObject);
+%     end
+% end
 
 videoDependentControlEnableState(handles, 'off')
 
