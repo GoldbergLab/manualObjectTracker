@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 11-Jun-2021 15:43:44
+% Last Modified by GUIDE v2.5 30-Nov-2021 16:32:42
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -115,7 +115,7 @@ handles.storingChangedDataSinceLastSave = false;
 
 % Create empty image to prepare image object
 handles.hImage = imagesc([], 'Parent', handles.axes1, 'Clipping', 'off');
-set(handles.hImage, 'ButtonDownFcn', @imageButtonDown);
+set(handles.hImage, 'ButtonDownFcn', @imageButtonDownCallback);
 axis(handles.axes1, 'manual');
 handles.axes1.Visible = 'off';
 colormap(handles.axes1, 'gray');
@@ -154,7 +154,7 @@ set(handles.figure1, 'WindowButtonMotionFcn', @mouseMotionHandler);
 handles.output = [];
 
 % Timer that controls video playback timing
-handles.timer = timer('TimerFcn', {@changeFrame, hObject},'Period', 0.01, 'ExecutionMode', 'fixedRate');
+handles.timer = timer('TimerFcn', {@timerChangeFrame, hObject},'Period', 0.01, 'ExecutionMode', 'fixedRate');
 
 % Flag that controls whether or not mouse motion invokes drawing function
 handles.currentlyFreehandDrawing = false;
@@ -197,8 +197,12 @@ set(handles.prerandomizedAnnotationVideoListbox, 'Value', 1);
 set(handles.fileList, 'Value', 1);
 set(handles.fileList, 'UserData', 1);
 
-% Update handles structure
-guidata(hObject, handles);
+% Mask-related data
+handles.maskDir = '';
+handles.maskData = [];
+handles.showMasks = handles.showMasksCheckbox.Value;
+handles.topMaskOrigin = [1, 1];
+handles.maskTransparency = 0.25;
 
 % Set stop freehand drawing callback
 set(handles.figure1, 'WindowButtonUpFcn', @windowButtonUpHandler);
@@ -207,11 +211,14 @@ set(handles.figure1, 'WindowButtonUpFcn', @windowButtonUpHandler);
 handles = setActiveROINum(handles, 1);
 
 % Present initial video frame
-updateDisplay(hObject);
+handles = updateDisplay(handles);
 % Start the video
 %start(handles.timer);
 % UIWAIT makes manualObjectTracker wait for user response (see UIRESUME)
 %uiwait(handles.figure1);
+
+% Update handles structure
+guidata(hObject, handles);
 
 function ensureMOTIsOnPath()
 % Thanks to Jan on MATLAB Answers: https://www.mathworks.com/matlabcentral/answers/86740-how-can-i-determine-if-a-directory-is-on-the-matlab-path-programmatically#answer_96295
@@ -317,11 +324,11 @@ function [userROIHandleData, handles] = createNewUserROIHandleData(handles, u)
 hold(handles.axes1, 'on')
 for n = 1:handles.numROIs
     userROIHandleData.ROIPointHandles{n} = line(handles.axes1, NaN,NaN);
-    set(userROIHandleData.ROIPointHandles{n}, 'DisplayName', [u, ' points'], 'Clipping', 'off', 'ButtonDownFcn', @imageButtonDown);
+    set(userROIHandleData.ROIPointHandles{n}, 'DisplayName', [u, ' points'], 'Clipping', 'off', 'ButtonDownFcn', @imageButtonDownCallback);
     userROIHandleData.ROIFreehandHandles{n} = line(handles.axes1, NaN,NaN);
-    set(userROIHandleData.ROIFreehandHandles{n}, 'DisplayName', [u, ' freehand'], 'Clipping', 'off', 'ButtonDownFcn', @imageButtonDown);
+    set(userROIHandleData.ROIFreehandHandles{n}, 'DisplayName', [u, ' freehand'], 'Clipping', 'off', 'ButtonDownFcn', @imageButtonDownCallback);
     userROIHandleData.absentDataIndicatorHandles{n} = text(handles.axes1, 'String', '', 'Position', [NaN,NaN], 'Units', 'characters');
-    set(userROIHandleData.absentDataIndicatorHandles{n}, 'ButtonDownFcn', @imageButtonDown);
+    set(userROIHandleData.absentDataIndicatorHandles{n}, 'ButtonDownFcn', @imageButtonDownCallback);
 end
 userROIHandleData.projectedTongueHandle = line(handles.axes1, NaN, NaN);
 set(userROIHandleData.projectedTongueHandle, 'HitTest', 'off', 'Color', 'blue', 'Marker', 'o', 'DisplayName', [u, ' proj'], 'Clipping', 'off');
@@ -335,8 +342,7 @@ function userROIData = createNewUserROIData(numFrames, numROIs)
 userROIData.absent = createBlankAbsentData(numFrames, numROIs);
 userROIData.stats = createBlankStatsData(numFrames, numROIs);
 
-function unloadVideoOrImage(hObject)
-handles = guidata(hObject);
+function handles = unloadVideoOrImage(handles)
 % Reset all ROI data
 if any(strcmp(handles.currUser, fieldnames(handles.ROIData)))
     [handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
@@ -345,18 +351,14 @@ if any(strcmp(handles.currUser, fieldnames(handles.ROIData)))
     handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
 end
 handles.k = 1;
-guidata(hObject, handles);
-updateDisplay(hObject);
-handles = guidata(hObject);
+handles = updateDisplay(handles);
 handles.videoData = [];
 handles.numFrames = 0;
 videoDependentControlEnableState(handles, 'off')
-guidata(hObject, handles);
-updateDisplay(hObject);
+handles = updateDisplay(handles);
 
-function loadVideoOrImage(hObject, file)
+function handles = loadVideoOrImage(handles, file)
 % Load a video or image from file, and reset all variables relating to the video and ROI data
-handles = guidata(hObject);
 disp('loadVideoOrImage');
 if ischar(file)
     disp(file)
@@ -422,8 +424,6 @@ if resetZoom || any(isnan(handles.zoomCenter))
 end
 
 videoDependentControlEnableState(handles, 'on')
-guidata(hObject, handles);
-%updateDisplay(hObject);
 
 if get(handles.autoLoadROIs, 'Value') && ischar(file)
     % Autoload corresponding ROI .mat file
@@ -444,7 +444,7 @@ if get(handles.autoLoadROIs, 'Value') && ischar(file)
         ROIfullfile = fullfile(defaultROIFolder, makeROINameFromVideoName(vname));
             if exist(ROIfullfile, 'file')
                 foundROIFile = true;
-                loadROIs(hObject, ROIfullfile);
+                handles = loadROIs(handles, ROIfullfile);
             end
 %        end
     end
@@ -452,6 +452,36 @@ if get(handles.autoLoadROIs, 'Value') && ischar(file)
         disp('...no corresponding ROI file found.');
     end
 end
+
+% If mask dir is set, load corresponding mask stack
+if handles.showMasks
+    if isempty(handles.maskDir)
+        handles = getMaskDirFromUser(handles);
+    end
+    disp('new video ==> loading new masks!')
+    handles = loadMasks(handles);
+    disp('done loading new masks!')
+end
+
+function videoSize = getVideoSize(handles)
+vSize = size(handles.videoData);
+if isempty(vSize)
+    height = 0;
+    width = 0;
+    nFrames = 0;
+    nChannels = 0;
+elseif length(vSize) == 3
+    height = vSize(1);
+    width = vSize(2);
+    nFrames = vSize(3);
+    nChannels = 1;
+elseif length(vSize) == 4
+    height = vSize(1);
+    width = vSize(2);
+    nFrames = vSize(3);
+    nChannels = vSize(4);
+end
+videoSize = [height, width, nFrames, nChannels];
 
 function [x, y] = createBlankROIs(numFrames, numROIs)
 % Create blank datastructure for holding a set of ROIs
@@ -527,9 +557,8 @@ else
     proceed = true;
 end
 
-function toggleDrawMode(hObject)
+function handles = toggleDrawMode(handles)
 % Switch between point mode and freehand mode for drawing ROIs
-handles = guidata(hObject);
 switch get(handles.modeButtonGroup.SelectedObject, 'String')
     case 'Freehand'
         set(handles.pointModeButton, 'Value', 1);
@@ -538,7 +567,6 @@ switch get(handles.modeButtonGroup.SelectedObject, 'String')
     case 'Rectangle'
         set(handles.freehandModeButton, 'Value', 1);
 end    
-guidata(hObject, handles);
 
 function KeyRelease(~, EventData, hObject, ~)
 handles = guidata(hObject);
@@ -554,42 +582,40 @@ handles = guidata(hObject);
 switch EventData.Key
     case 'shift'
         handles.shiftDown = true;
-        guidata(hObject, handles);
     case cellfun(@(x) num2str(x), num2cell(1:handles.numROIs), 'UniformOutput', false)
         % Switch which ROI is active
         handles = setActiveROINum(handles, str2double(EventData.Key));
-        guidata(hObject, handles);
     case 'm'
         if any(strcmp(EventData.Modifier, 'control'))
             % Ctl-m = switch between point and freehand ROI drawing modes
-            toggleDrawMode(hObject);
+            handles = toggleDrawMode(handles);
         else
-            % Toggle distance measurement on/off
-            toggleDistanceMeasurement(hObject)
+            % Toggle show masks
+            handles = setShowMasks(handles, ~handles.showMasks);
         end
+    case 'r'
+        % Toggle distance measurement on/off
+        handles = toggleDistanceMeasurement(handles);
     case 'a'
         if any(strcmp(EventData.Modifier, 'control')) && any(strcmp(EventData.Modifier, 'shift'))
             % ctl-shift-a = toggle between showing all user ROIs at the same time
             handles.showAllUserData = ~handles.showAllUserData;
-            guidata(hObject, handles);
         else
             % a = Reset zoom to default
             frameSize = flip(size(handles.videoData(:, :, 1)));
             handles.zoomCenter = frameSize/2;
             handles.zoomFactor = 1;
-            guidata(hObject, handles);
         end
     case 'z'
         if any(strcmp(EventData.Modifier, 'control'))
             % ctl-z = undo last ROI point
-            undoButton_Callback(hObject, NaN, handles)
+            handles = undo(handles);
         end
     case 'd'
         coordinates = get(handles.axes1, 'CurrentPoint');
         x = round(coordinates(1, 1));
         y = round(coordinates(1, 2));
         handles = addPoint(x, y, handles);
-        guidata(hObject, handles);
     case 'delete'
         if any(strcmp(EventData.Modifier, 'shift'))
             % shift-del = clear all points in all ROIs
@@ -597,8 +623,7 @@ switch EventData.Key
             switch choice
                 case 'Delete'
                     handles = clearROI(1:handles.numROIs, handles.k, handles);
-                    guidata(hObject, handles);
-                    updateDisplay(hObject);
+                    handles = updateDisplay(handles);
                 case 'Cancel'
                     return
             end
@@ -608,8 +633,7 @@ switch EventData.Key
             switch choice
                 case 'Delete'
                     handles = clearROI(handles.activeROINum, handles.k, handles);
-                    guidata(hObject, handles);
-                    updateDisplay(hObject);
+                    handles = updateDisplay(handles);
                 case 'Cancel'
                     return
             end
@@ -621,7 +645,6 @@ switch EventData.Key
                     case {'Freehand', 'Rectangle'}
                         handles.copiedROIDataX = handles.ROIData.(handles.currUser).xFreehands(:, handles.k);
                         handles.copiedROIDataY = handles.ROIData.(handles.currUser).yFreehands(:, handles.k);
-                        guidata(hObject, handles);
                         disp('Copied all ROIs');
                     case 'Point'
                         disp('Copy/paste not currently implemented for point mode')
@@ -635,7 +658,6 @@ switch EventData.Key
                         cellfun(@(r){[]}, handles.copiedROIDataY);
                         handles.copiedROIDataX{handles.activeROINum} = handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k};
                         handles.copiedROIDataY{handles.activeROINum} = handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k};
-                        guidata(hObject, handles);
                         disp('Copied this ROI');
                     case 'Point'
                         disp('Copy/paste not currently implemented for point mode')
@@ -650,9 +672,7 @@ switch EventData.Key
                     [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}] = closeROI(handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k});
             end
             handles = noteThatChangesNeedToBeSaved(handles);
-            guidata(hObject, handles);
-            updateDisplay(hObject);
-    %        changeFrame(NaN, NaN, hObject, 'delta', 1);
+            handles = updateDisplay(handles);
         end
     case 'v'
         if any(strcmp(EventData.Modifier, 'control'))
@@ -667,7 +687,6 @@ switch EventData.Key
                             handles = noteThatChangesNeedToBeSaved(handles);
                         end
                     end
-                    guidata(hObject, handles);
                     disp('Pasted all ROIs');
                 case 'Point'
                     disp('Copy/paste not implemented for points yet')
@@ -684,17 +703,16 @@ switch EventData.Key
             % Mark current ROI as "no tongue"
             handles = toggleTongueAbsent(handles, k, n, u);
         end
-        guidata(hObject, handles);
     case 'leftarrow'
         if strcmp(EventData.Modifier, 'control')
             % ctl-left = go back 10 frames in video
-            changeFrame(NaN, NaN, hObject, 'delta', -10);
+            handles = changeFrame(handles, 'delta', -10);
         elseif isempty(EventData.Modifier)
             % left = go back 1 frame in video
-            changeFrame(NaN, NaN, hObject, 'delta', -1);
+            handles = changeFrame(handles, 'delta', -1);
         elseif strcmp(EventData.Modifier, 'shift')
             % shift-left = shift last ROI point left 1 pixel
-            shiftCurrentPoint(hObject, -1, 0)
+            handles = shiftCurrentPoint(handles, -1, 0);
         elseif strcmp(EventData.Modifier, 'alt')
             currentTime = now();
             dt = currentTime - handles.translateTimes.left;
@@ -712,17 +730,16 @@ switch EventData.Key
                 case 'Point'
                     [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = translateROI(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
             end
-            guidata(hObject, handles);
         end
     case 'rightarrow'
         if strcmp(EventData.Modifier, 'control')
             % ctl-right = go forward 10 frames in video
-            changeFrame(NaN, NaN, hObject, 'delta', 10);
+            handles = changeFrame(handles, 'delta', 10);
         elseif isempty(EventData.Modifier)
             % right = go forward 1 frame in video
-            changeFrame(NaN, NaN, hObject, 'delta', 1);
+            handles = changeFrame(handles, 'delta', 1);
         elseif strcmp(EventData.Modifier, 'shift')
-            shiftCurrentPoint(hObject, 1, 0)
+            handles = shiftCurrentPoint(handles, 1, 0);
             % shift-right = shift last ROI point right 1 pixel
         elseif strcmp(EventData.Modifier, 'alt')
             currentTime = now();
@@ -741,12 +758,11 @@ switch EventData.Key
                 case 'Point'
                     [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = translateROI(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
             end
-            guidata(hObject, handles);
         end
     case 'uparrow'
         if strcmp(EventData.Modifier, 'shift')
             % shift-up = shift last ROI point up 1 pixel
-            shiftCurrentPoint(hObject, 0, -1)
+            handles = shiftCurrentPoint(handles, 0, -1);
         elseif strcmp(EventData.Modifier, 'alt')
             currentTime = now();
             dt = currentTime - handles.translateTimes.up;
@@ -764,12 +780,11 @@ switch EventData.Key
                 case 'Point'
                     [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = translateROI(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
             end
-            guidata(hObject, handles);
         end
     case 'downarrow'
         if strcmp(EventData.Modifier, 'shift')
             % shift-down = shift last ROI point down 1 pixel
-            shiftCurrentPoint(hObject, 0, 1)
+            handles = shiftCurrentPoint(handles, 0, 1);
         elseif strcmp(EventData.Modifier, 'alt')
             currentTime = now();
             dt = currentTime - handles.translateTimes.down;
@@ -787,11 +802,10 @@ switch EventData.Key
                 case 'Point'
                     [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = translateROI(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
             end
-            guidata(hObject, handles);
         end
     case 'space'
         % space = toggle play/pause video
-        playPause_Callback(hObject, EventData, handles);
+        handles = playPause(handles);
     case 'q'
         % q = switch to previous video in video list
         if isPrerandomizedTrackingModeOn(handles)
@@ -800,7 +814,7 @@ switch EventData.Key
                 currentVideoNumber = get(handles.prerandomizedAnnotationVideoListbox, 'Value');
                 newVideoNumber = mod(currentVideoNumber - 2, numVideos)+1;
                 set(handles.prerandomizedAnnotationVideoListbox, 'Value', newVideoNumber);
-                prerandomizedAnnotationVideoListbox_Callback(hObject, NaN, handles);
+                handles = prerandomizedAnnotationVideoListboxChange(handles);
             end
         else
             if strcmp(get(handles.fileList, 'Enable'), 'on')
@@ -808,7 +822,7 @@ switch EventData.Key
                 currentVideoNumber = get(handles.fileList, 'Value');
                 newVideoNumber = mod(currentVideoNumber - 2, numVideos)+1;
                 set(handles.fileList, 'Value', newVideoNumber);
-                fileList_Callback(hObject, NaN, handles);
+                handles = switchVideoFile(handles);
             end
         end
     case 'w'
@@ -820,7 +834,7 @@ switch EventData.Key
                 currentVideoNumber = get(handles.prerandomizedAnnotationVideoListbox, 'Value');
                 newVideoNumber = mod(currentVideoNumber, numVideos)+1;
                 set(handles.prerandomizedAnnotationVideoListbox, 'Value', newVideoNumber);
-                prerandomizedAnnotationVideoListbox_Callback(hObject, NaN, handles);
+                handles = prerandomizedAnnotationVideoListboxChange(handles);
             end
         else
             if strcmp(get(handles.fileList, 'Enable'), 'on')
@@ -828,27 +842,25 @@ switch EventData.Key
                 currentVideoNumber = get(handles.fileList, 'Value');
                 newVideoNumber = mod(currentVideoNumber, numVideos)+1;
                 set(handles.fileList, 'Value', newVideoNumber);
-                fileList_Callback(hObject, NaN, handles);
+                handles = switchVideoFile(handles);
             end
         end
 end
-updateDisplay(hObject);
+handles = updateDisplay(handles);
+guidata(hObject, handles);
 
-function toggleDistanceMeasurement(hObject)
+function handles = toggleDistanceMeasurement(handles)
 % Currently only creates them, doesn't delete them. Not sure why, but right
 % click brings up a context menu that has a delete button that works.
-handles = guidata(hObject);
 if isvalid(handles.imageDistanceMeasurementHandle)
     delete(handles.imageDistanceMeasurementHandle)
 else
     handles.imageDistanceMeasurementHandle = imdistline(handles.axes1);
     setLabelTextFormatter(handles.imageDistanceMeasurementHandle,'%02.0f px');
 end
-guidata(hObject);
 
-function shiftCurrentPoint(hObject, deltaX, deltaY)
+function shiftCurrentPoint(handles, deltaX, deltaY)
 % shift last ROI point by delta in x and y directions
-handles = guidata(hObject);
 switch get(handles.modeButtonGroup.SelectedObject, 'String')
     case {'Freehand', 'Rectangle'}
         [handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k}] = shiftLastNonclosingPoint(deltaX, deltaY, handles.ROIData.(handles.currUser).xFreehands{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yFreehands{handles.activeROINum, handles.k});
@@ -856,7 +868,6 @@ switch get(handles.modeButtonGroup.SelectedObject, 'String')
         [handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}] = shiftLastNonclosingPoint(deltaX, deltaY, handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k});
 end
 handles = noteThatChangesNeedToBeSaved(handles);
-guidata(hObject, handles);
 
 function [x, y] = shiftLastNonclosingPoint(deltaX, deltaY, x, y)
 % shift last ROI point that is not a closing point (the same as the
@@ -888,15 +899,19 @@ if ~isROIClosed(x, y)
     y(end+1) = y(1);
 end
 
-function changeFrame(~, ~, hObject, mode, value, varargin)
+function timerChangeFrame(~, ~, hObject, mode, value, varargin)
+handles = guidata(hObject);
+handles = changeFrame(handles, mode, value, varargin{:});
+guidata(hObject, handles);
+
+function handles = changeFrame(handles, mode, value, varargin)
 % Switch the currently displayed video frame by either a given frame delta,
 %   or to a given frame number, depending on if the mode argument is 'delta'
 %   or 'absolute'
-handles = guidata(hObject);
 if handles.numFrames == 0
     return;
 end
-if nargin == 3
+if nargin == 1
     dk = 1;
 else
     switch mode
@@ -917,12 +932,10 @@ else
 end
 set(handles.sliderGrabBar, 'Position', [val, 0, handles.sliderGrabBarWidth, 1]);
 
-guidata(hObject, handles);
-updateDisplay(hObject);
+handles = updateDisplay(handles);
 
-function updateDisplay(hObject)
+function handles = updateDisplay(handles)
 % Master function that updates the entire GUI (mostly the stuff drawn on the axes) as is necessary
-handles = guidata(hObject);
 k = handles.k;
 if handles.numFrames == 0
     % No video frames present, do not update GUI
@@ -932,6 +945,15 @@ end
 
 % Display the current video frame
 frame = handles.videoData(:, :, k);
+if handles.showMasks
+    % Mask overlay is on
+    if ~isempty(handles.maskData)
+        % Masks have been loaded
+        frame = labeloverlay(frame, handles.maskData(:, :, k), 'Transparency', handles.maskTransparency);
+    end
+end
+
+
 frameSize = size(frame);
 % axis(handles.axes1, [1, frameSize(2), 1, frameSize(1)]);
 % axis(handles.axes1, 'equal');
@@ -1071,7 +1093,7 @@ switch get(handles.modeButtonGroup.SelectedObject, 'String')
             = getUpdatedCoords(x, y, handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, k}, get(handles.autocloseROI, 'Value'));
 end
 
-function imageButtonDown(hObject, ~)
+function imageButtonDownCallback(hObject, ~)
 % Handle mouse clicks on the video frame image
 handles = guidata(hObject);
 k = handles.k;
@@ -1098,8 +1120,7 @@ switch get(handles.figure1, 'SelectionType')
             handles = noteThatChangesNeedToBeSaved(handles);
         end
 end
-guidata(hObject, handles);
-updateDisplay(hObject);
+handles = updateDisplay(handles);guidata(hObject, handles);
 
 function handles = updateZoomBox(handles, x, y)
 if ~handles.zooming
@@ -1182,7 +1203,7 @@ if handles.sliding
     val = delta / axesPosition(3);
     nextK = round(val*(handles.numFrames-1))+1;
     deltaK = round((nextK - handles.k));
-    changeFrame(NaN, NaN, hObject, 'delta', deltaK);
+    handles = changeFrame(handles, 'delta', deltaK);
 end
 if handles.currentlyFreehandDrawing
     % User is currently freehand drawing
@@ -1195,13 +1216,11 @@ if handles.currentlyFreehandDrawing
         [handles.ROIData.(handles.currUser).xFreehands{n, k}, handles.ROIData.(handles.currUser).yFreehands{n, k}] ...
             = getUpdatedCoords(x, y, handles.ROIData.(handles.currUser).xFreehands{n, k}, handles.ROIData.(handles.currUser).yFreehands{n, k}, get(handles.autocloseROI, 'Value'));
         handles = noteThatChangesNeedToBeSaved(handles);
-        guidata(hObject, handles);
-        updateDisplay(hObject);
+        handles = updateDisplay(handles);
     end
 end
 if handles.zooming
     % If currently zooming, display zoom box
-    handles = guidata(hObject);
      coordinates = get(handles.axes1, 'CurrentPoint');
     x = round(coordinates(1, 1));
     y = round(coordinates(1, 2));
@@ -1217,17 +1236,16 @@ if handles.zooming
     else
         handles.zoomBoxHandle.Position = rectangleBounds;
     end
-    guidata(hObject, handles);
 end
-if handles.showTemporarySegment
+if handles.showTemporarySegment && handles.shiftDown
     pt = get(handles.axes1, 'CurrentPoint');
     x = pt(1, 1);
     y = pt(1, 2);
     handles.temporaryX = x;
     handles.temporaryY = y;
-    guidata(hObject, handles);
-    updateDisplay(hObject);
+    handles = updateDisplay(handles);
 end
+guidata(hObject, handles);
 
 function absentFlag = warnDataAbsent(handles, k, n, u)
 % Check if user is trying to draw an ROI that has already been marked
@@ -1291,8 +1309,8 @@ if handles.numFrames == 0
 end
 handles = clearROI(handles.activeROINum, handles.k, handles);
 handles = noteThatChangesNeedToBeSaved(handles);
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 function handles = clearROI(roiNum, frameNum, handles)
 % Clear one or more ROIs in one or more frames
@@ -1316,11 +1334,7 @@ end
 
 handles = noteThatChangesNeedToBeSaved(handles);
 
-% --- Executes on button press in undoButton.
-function undoButton_Callback(hObject, ~, handles)
-% hObject    handle to undoButton (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+function handles = undo(handles)
 if handles.numFrames == 0
     return;
 end
@@ -1333,19 +1347,30 @@ switch get(handles.modeButtonGroup.SelectedObject, 'String')
         handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k} = handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k}(1:end-1);
 end
 handles = noteThatChangesNeedToBeSaved(handles);
-guidata(hObject, handles);
-updateDisplay(hObject);
+handles = updateDisplay(handles);
 
-% --- Executes on button press in playPause.
-function playPause_Callback(~, ~, handles)
-% hObject    handle to playPause (see GCBO)
+% --- Executes on button press in undoButton.
+function undoButton_Callback(hObject, ~, handles)
+% hObject    handle to undoButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+handles = undo(handles);
+guidata(hObject, handles);
+
+function handles = playPause(handles)
 if strcmp(get(handles.timer,'Running'), 'off')
     start(handles.timer);
 else
     stop(handles.timer);
 end
+
+% --- Executes on button press in playPause.
+function playPause_Callback(hObject, ~, handles)
+% hObject    handle to playPause (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+handles = playPause(handles);
+guidata(hObject, handles)
 % Hint: get(hObject,'Value') returns toggle state of playPause
 
 % function startTimer(hObject)
@@ -1354,8 +1379,7 @@ end
 %     start(handles.timer);
 % end
 
-function stopTimer(hObject)
-handles = guidata(hObject);
+function handles = stopTimer(handles)
 if strcmp(get(handles.timer,'Running'), 'on')
     stop(handles.timer);
 end
@@ -1381,37 +1405,42 @@ else
 end
 
 % --- Executes on button press in backFrame.
-function backFrame_Callback(hObject, ~, ~)
+function backFrame_Callback(hObject, ~, handles)
 % hObject    handle to backFrame (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-stopTimer(hObject)
-changeFrame(NaN, NaN, hObject, 'delta', -1);
+handles = stopTimer(handles);
+handles = changeFrame(handles, 'delta', -1);
+guidata(hObject, handles);
 
 % --- Executes on button press in forwardFrame.
-function forwardFrame_Callback(hObject, ~, ~)
+function forwardFrame_Callback(hObject, ~, handles)
 % hObject    handle to forwardFrame (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-stopTimer(hObject)
-changeFrame(NaN, NaN, hObject, 'delta', 1);
+handles = stopTimer(handles);
+handles = changeFrame(handles, 'delta', 1);
+guidata(hObject, handles);
 
 % --- If Enable == 'on', executes on mouse press in 5 pixel border.
 % --- Otherwise, executes on mouse press in 5 pixel border or over backFrame.
-function backFrame_ButtonDownFcn(hObject, ~, ~)
+function backFrame_ButtonDownFcn(hObject, ~, handles)
 % hObject    handle to backFrame (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-stopTimer(hObject)
-changeFrame(NaN, NaN, hObject, 'delta', -1);
+handles = stopTimer(handles);
+handles = changeFrame(handles, 'delta', -1);
+guidata(hObject, handles);
 
 function sliderKeyPress(hObject, eventdata)
+handles = guidata(hObject);
 switch eventdata.Key
     case 'rightarrow'
-        changeFrame(NaN, NaN, hObject, 'delta', 1);
+        handles = changeFrame(handles, 'delta', 1);
     case 'leftarrow'
-        changeFrame(NaN, NaN, hObject, 'delta', -1);
+        handles = changeFrame(handles, 'delta', -1);
 end
+guidata(hObject, handles);
 
 function roiName = makeROINameFromVideoName(videoName)
 roiName = [videoName, '_ROI.mat'];
@@ -1470,6 +1499,21 @@ function modeButtonGroup_ButtonDownFcn(~, ~, ~)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+function handles = switchVideoFile(handles)
+set(handles.fileList, 'Enable', 'off');
+[proceed, handles] = warnIfLosingROIChanges(handles);
+if proceed
+    [PathName, FileName] = getCurrentVideoFileSelection(handles);
+    disp('Loading video...')
+    disp(['Loading file: ', fullfile(PathName, FileName)])
+    handles = loadVideoOrImage(handles, fullfile(PathName, FileName));
+    disp('...video load complete')
+    set(handles.fileList, 'UserData', get(handles.fileList, 'Value'));
+else
+    set(handles.fileList, 'Value', get(handles.fileList, 'UserData'));
+end
+set(handles.fileList, 'Enable', 'on');
+handles = updateDisplay(handles);
 
 % --- Executes on selection change in fileList.
 function fileList_Callback(hObject, ~, handles)
@@ -1479,22 +1523,10 @@ function fileList_Callback(hObject, ~, handles)
 
 % Hints: contents = cellstr(get(hObject,'String')) returns fileList contents as cell array
 %        contents{get(hObject,'Value')} returns selected item from fileList
-set(handles.fileList, 'Enable', 'off');
-[proceed, handles] = warnIfLosingROIChanges(handles);
-if proceed
-    [PathName, FileName] = getCurrentVideoFileSelection(handles);
-    disp('Loading video...')
-    disp(['Loading file: ', fullfile(PathName, FileName)])
-    loadVideoOrImage(hObject, fullfile(PathName, FileName));
-    disp('...video load complete')
-    set(handles.fileList, 'UserData', get(handles.fileList, 'Value'));
-else
-    set(handles.fileList, 'Value', get(handles.fileList, 'UserData'));
-end
-set(handles.fileList, 'Enable', 'on');
-updateDisplay(hObject)
+handles = switchVideoFile(handles);
+guidata(hObject, handles);
 
-function [PathName, FileName] = getCurrentVideoFileSelection(handles, varargin)
+function [PathName, FileName, FileIndex] = getCurrentVideoFileSelection(handles, varargin)
 if nargin == 2
     previous = varargin{1};
 else
@@ -1506,12 +1538,14 @@ if ~prerandomizedTrackingMode
     PathName = get(handles.currentDirectory, 'String');
     FileNames = get(handles.fileList, 'String');
     if previous
-        FileName = cell2mat(FileNames(get(handles.fileList, 'UserData')));
+        FileIndex = get(handles.fileList, 'UserData');
+        FileName = cell2mat(FileNames(FileIndex));
     else
-        FileName = cell2mat(FileNames(get(handles.fileList, 'Value')));
+        FileIndex = get(handles.fileList, 'Value');
+        FileName = cell2mat(FileNames(FileIndex));
     end
 else
-    [videoFilename, ~] = getPrerandomizedAnnotationNameAndFrameNumber(handles, previous);
+    [videoFilename, ~, FileIndex] = getPrerandomizedAnnotationNameAndFrameNumber(handles, previous);
     if ~isempty(videoFilename)
         [PathName, FileNameMinusExtension, Extension] = fileparts(videoFilename);
         FileName = [FileNameMinusExtension, Extension];
@@ -1594,6 +1628,11 @@ if isPrerandomizedTrackingModeOn(handles)
 else
     updateListBox(hObject, folder);
 end
+handles = guidata(hObject);
+handles = unloadMasks(handles);
+handles = unloadVideoOrImage(handles);
+handles = updateDisplay(handles);
+guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function currentDirectory_CreateFcn(hObject, ~, ~)
@@ -1630,8 +1669,8 @@ function handles = clearAllUserData(handles)
 handles = deleteUserROIHandleData(handles);
 handles = deleteUserROIData(handles);
 
-function loadROIs(hObject, ROIfilename)
-handles = guidata(hObject);
+function handles = loadROIs(handles, ROIfilename)
+% handles = guidata(hObject);
 [proceed, handles] = warnIfLosingROIChanges(handles);
 if proceed
     data = load(ROIfilename);
@@ -1734,8 +1773,7 @@ if proceed
     disp(['Successfully loaded ROIs from file: ', ROIfilename])
 end
 
-guidata(hObject, handles);
-updateDisplay(hObject)
+handles = updateDisplay(handles);
 
 % --- Executes on button press in loadROIs.
 function loadROIs_Callback(hObject, ~, ~)
@@ -1746,8 +1784,9 @@ handles = guidata(hObject);
 [VideoFilePath, ~] = getCurrentVideoFileSelection(handles);
 [FileName,PathName,~] = uigetfile(fullfile(VideoFilePath, '*.mat'),'Select ROI file to load');
 if FileName ~= 0
-    loadROIs(hObject, fullfile(PathName, FileName));
+    handles = loadROIs(handles, fullfile(PathName, FileName));
 end
+guidata(hObject, handles)
 
 % --- Executes on button press in autoLoadROIs.
 function autoLoadROIs_Callback(~, ~, ~)
@@ -1777,8 +1816,8 @@ if proceed
             [handles.ROIData.(handles.currUser).xPoints, handles.ROIData.(handles.currUser).yPoints] = createBlankROIs(handles.numFrames, handles.numROIs);
     end
     handles = noteThatChangesDoNotNeedToBeSaved(handles);
+    handles = updateDisplay(handles);
     guidata(hObject, handles);
-    updateDisplay(hObject);
 end
 
 % --- Executes on button press in useDefaultROIPath.
@@ -1820,8 +1859,8 @@ switch get(handles.modeButtonGroup.SelectedObject, 'String')
             = closeROI(handles.ROIData.(handles.currUser).xPoints{handles.activeROINum, handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.activeROINum, handles.k});
 end
 handles = noteThatChangesNeedToBeSaved(handles);
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 % --- Executes on button press in switchCurrentUser.
 function switchCurrentUser_Callback(hObject, ~, handles)
@@ -1838,8 +1877,8 @@ else
         handles = createNewUser(handles, handles.currUser);
     end
 end
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 function handles = createNewUser(handles, user)
 handles.ROIData.(user) = createNewUserROIData(handles.numFrames, handles.numROIs);
@@ -1854,7 +1893,10 @@ function jumpToFrameBox_Callback(hObject, ~, handles)
 
 % Hints: get(hObject,'String') returns contents of jumpToFrameBox as text
 %        str2double(get(hObject,'String')) returns contents of jumpToFrameBox as a double
-changeFrame(NaN, NaN, hObject, 'absolute', str2double(get(handles.jumpToFrameBox,'String')));
+newFrame = str2double(get(handles.jumpToFrameBox,'String'));
+handles = changeFrame(handles, 'absolute', newFrame);
+handles = updateDisplay(handles);
+guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function jumpToFrameBox_CreateFcn(hObject, ~, ~)
@@ -1913,8 +1955,8 @@ n = handles.activeROINum;
 u = handles.currUser;
 handles = toggleTongueAbsent(handles, k, n, u);
 handles = noteThatChangesNeedToBeSaved(handles);
+handles = updateDisplay(handles)
 guidata(hObject, handles)
-updateDisplay(hObject)
 
 % --- Executes on button press in helpButton.
 function helpButton_Callback(hObject, eventdata, handles)
@@ -1939,9 +1981,9 @@ else
 end
 
 set(handles.currentDirectory, 'String', '');
+handles = unloadVideoOrImage(handles);
 guidata(hObject, handles);
 currentDirectory_Callback(hObject, [], handles);
-unloadVideoOrImage(hObject);
 
 function mode = isPrerandomizedTrackingModeOn(handles)
 mode = get(handles.prerandomizedTrackingModeButton, 'Value');
@@ -1993,16 +2035,7 @@ if ~isempty(handles.prerandomizedAnnotationInfo)
 end
 set(handles.prerandomizedAnnotationFrameNumListbox, 'String', frameNumDisplayList);
 
-% --- Executes on selection change in prerandomizedAnnotationVideoListbox.
-function prerandomizedAnnotationVideoListbox_Callback(hObject, ~, ~)
-% hObject    handle to prerandomizedAnnotationVideoListbox (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns prerandomizedAnnotationVideoListbox contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from prerandomizedAnnotationVideoListbox
-
-handles = guidata(hObject);
+function handles = prerandomizedAnnotationVideoListboxChange(handles)
 set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'off');
 set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'off');
 [proceed, handles] = warnIfLosingROIChanges(handles);
@@ -2011,12 +2044,10 @@ if proceed
     if ~isempty(FileName)
         disp('Loading video...')
         disp(['Loading file: ', fullfile(PathName, FileName)])
-        loadVideoOrImage(hObject, fullfile(PathName, FileName));
+        handles = loadVideoOrImage(handles, fullfile(PathName, FileName));
         disp('...video load complete')
     else
-        guidata(hObject, handles);
-        unloadVideoOrImage(hObject);
-        handles = guidata(hObject);
+        handles = unloadVideoOrImage(handles);
     end
     set(handles.prerandomizedAnnotationVideoListbox, 'UserData', get(handles.prerandomizedAnnotationVideoListbox, 'Value'));
 else
@@ -2024,12 +2055,24 @@ else
 end
 set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'on');
 set(handles.prerandomizedAnnotationFrameNumListbox, 'Value', 1);
-updateDisplay(hObject)
+handles = updateDisplay(handles);
 % Call framenumber listbox change function
-prerandomizedAnnotationFrameNumListbox_Callback(hObject, NaN, handles)
-updateDisplay(hObject)
+handles = prerandomizedAnnotationFrameNumListboxChange(handles);
+handles = updateDisplay(handles);
 set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'on');
 set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'on');
+
+% --- Executes on selection change in prerandomizedAnnotationVideoListbox.
+function prerandomizedAnnotationVideoListbox_Callback(hObject, ~, handles)
+% hObject    handle to prerandomizedAnnotationVideoListbox (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns prerandomizedAnnotationVideoListbox contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from prerandomizedAnnotationVideoListbox
+
+handles = prerandomizedAnnotationVideoListboxChange(handles);
+guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function prerandomizedAnnotationVideoListbox_CreateFcn(hObject, ~, ~)
@@ -2043,7 +2086,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-function [videoFilename, frameNumber] = getPrerandomizedAnnotationNameAndFrameNumber(handles, varargin)
+function [videoFilename, frameNumber, frameNumberIndex] = getPrerandomizedAnnotationNameAndFrameNumber(handles, varargin)
 if nargin == 2
     previous = varargin{1};
 else
@@ -2159,8 +2202,20 @@ handles = updatePrerandomizedAnnotationListboxes(handles);
 % Select first video
 set(handles.prerandomizedAnnotationVideoListbox, 'Value', 1);
 set(handles.prerandomizedAnnotationVideoListbox, 'UserData', 1);
+handles = prerandomizedAnnotationFrameNumListboxChange(handles);
 guidata(hObject, handles)
-prerandomizedAnnotationVideoListbox_Callback(hObject, NaN, NaN);
+
+function handles = prerandomizedAnnotationFrameNumListboxChange(handles)
+set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'off');
+set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'off');
+
+[videoFilename, frameNumber] = getPrerandomizedAnnotationNameAndFrameNumber(handles);
+if ~isnan(frameNumber)
+    handles = changeFrame(handles, 'absolute', frameNumber);
+end
+
+set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'on');
+set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'on');
 
 % --- Executes on selection change in prerandomizedAnnotationFrameNumListbox.
 function prerandomizedAnnotationFrameNumListbox_Callback(hObject, ~, handles)
@@ -2170,16 +2225,9 @@ function prerandomizedAnnotationFrameNumListbox_Callback(hObject, ~, handles)
 
 % Hints: contents = cellstr(get(hObject,'String')) returns prerandomizedAnnotationFrameNumListbox contents as cell array
 %        contents{get(hObject,'Value')} returns selected item from prerandomizedAnnotationFrameNumListbox
-set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'off');
-set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'off');
 
-[videoFilename, frameNumber] = getPrerandomizedAnnotationNameAndFrameNumber(handles);
-if ~isnan(frameNumber)
-    changeFrame(NaN, NaN, hObject, 'absolute', frameNumber);
-end
-
-set(handles.prerandomizedAnnotationVideoListbox, 'Enable', 'on');
-set(handles.prerandomizedAnnotationFrameNumListbox, 'Enable', 'on');
+handles = prerandomizedAnnotationFrameNumListboxChange(handles);
+guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function prerandomizedAnnotationFrameNumListbox_CreateFcn(hObject, eventdata, handles)
@@ -2251,12 +2299,13 @@ function helpdialog(handles)
         '  alt-arrow        - translate ROI (hold down to go faster)', ...
         '  q                - switch to the previous video in the list', ...
         '  w                - switch to the next video in the list', ...
-        '  m                - add a measuring tool (right click to delete)', ...
+        '  r                - add a measuring ruler (right click to delete)', ...
         '  ctl-c            - copy current ROI', ...
         '  ctl-shift-c      - copy all ROIs in this frame', ...
         '  ctl-v            - paste copied ROI, overwriting current ROI', ...
         '  ctl-shift-v      - paste all copied ROIs, potentially overwriting', ...
         '                     all ROIs in this frame', ...
+        '  m                - toggle show mask overlay', ...
         '', ...
         '  Written by Brian Kardon bmk27@cornell.edu 2018'...
         '', ...
@@ -2381,8 +2430,8 @@ scaleUnitList = cellstr(get(handles.scaleUnitSelector, 'String'));
 scaleUnit = scaleUnitList{get(handles.scaleUnitSelector, 'Value')};
 handles.ROIData.(handles.currUser).stats.scaleUnit = scaleUnit;
 handles = noteThatChangesNeedToBeSaved(handles);
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 % --- Executes during object creation, after setting all properties.
 function scaleUnitSelector_CreateFcn(hObject, eventdata, handles)
@@ -2415,8 +2464,8 @@ handles = guidata(hObject);
 handles.ROIData.(handles.currUser).stats.unitScaleMeasurement = str2double(get(handles.unitScaleMeasurement, 'String'));
 handles = noteThatChangesNeedToBeSaved(handles);
 handles = updateROIStatDisplay(handles);
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2442,8 +2491,8 @@ handles = guidata(hObject);
 handles.ROIData.(handles.currUser).stats.pixelScaleMeasurement = str2double(get(handles.pixelScaleMeasurement, 'String'));
 handles = noteThatChangesNeedToBeSaved(handles);
 handles = updateROIStatDisplay(handles);
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2501,8 +2550,8 @@ if ~isempty(answer)
             [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = rotateROI(theta, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
     end
     handles = noteThatChangesNeedToBeSaved(handles);
+    handles = updateDisplay(handles);
     guidata(hObject, handles);
-    updateDisplay(hObject);
 end
 
 % --- Executes on button press in scaleROIButton.
@@ -2521,8 +2570,8 @@ if ~isempty(answer)
             [handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k}] = scaleROI(scale, handles.ROIData.(handles.currUser).xPoints{handles.k}, handles.ROIData.(handles.currUser).yPoints{handles.k});
     end
     handles = noteThatChangesNeedToBeSaved(handles);
+    handles = updateDisplay(handles);
     guidata(hObject, handles);
-    updateDisplay(hObject);
 end
 
 
@@ -2538,8 +2587,8 @@ handles.ROIData.(handles.currUser).yFreehands = permuteRows(handles.ROIData.(han
 handles.ROIData.(handles.currUser).xPoints = permuteRows(handles.ROIData.(handles.currUser).xPoints);
 handles.ROIData.(handles.currUser).yPoints = permuteRows(handles.ROIData.(handles.currUser).yPoints);
 handles = noteThatChangesNeedToBeSaved(handles);
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 function permutedArray = permuteRows(array)
 shape = size(array);
@@ -2616,11 +2665,203 @@ switch get(handles.figure1, 'SelectionType')
         y = round(coordinates(1, 2));
         handles = updateZoomBox(handles, x, y);
 end
+handles = updateDisplay(handles);
 guidata(hObject, handles);
-updateDisplay(hObject);
 
 function getNewNamesOfROIs(hObject, eventdata, handles)
 newNames = getUserMapping(arrayfun(@(x)num2str(x), 1:handles.numROIs, 'UniformOutput', false), 'ROI #', handles.namesOfROIs);
 handles.namesOfROIs = newNames;
 handles = updateROIDisplay(handles);
 guidata(hObject, handles)
+
+function handles = loadCurrentMaskStack(handles)
+% Load and assemble the stack of mask overlays for each video frame
+
+% Obtain the list of masks available in the current mask directory
+[topMaskList, botMaskList] = getMaskLists(handles);
+% Get the index of the currently loaded video file, assuming the masks are
+%   in the same alphabetical order as the videos.
+[~, ~, fileIndex] = getCurrentVideoFileSelection(handles);
+disp('current file index:')
+disp(fileIndex)
+% Get the paths to the current top and bottom mask stacks
+currentTopMaskPath = topMaskList{fileIndex};
+currentBotMaskPath = botMaskList{fileIndex};
+disp('Top mask list:')
+disp(topMaskList')
+disp('Picked:')
+disp(currentTopMaskPath)
+disp('Bot mask list:')
+disp(botMaskList')
+disp('Picked:')
+disp(currentBotMaskPath)
+
+% Load top mask stack from file
+s = load(currentTopMaskPath);
+topMaskStack = permute(s.mask_pred, [2, 3, 1]);
+% Load bottom mask stack from file
+s = load(currentBotMaskPath);
+botMaskStack = permute(s.mask_pred, [2, 3, 1]);
+videoSize = getVideoSize(handles);
+handles.maskData = combineTopAndBottomMaskStacks(topMaskStack, botMaskStack, videoSize, handles.topMaskOrigin);
+
+function [topMaskList, botMaskList] = getMaskLists(handles)
+topMaskList = findFilesByRegex(handles.maskDir, 'Top\_[0-9]+\.[mM][aA][tT]');
+botMaskList = findFilesByRegex(handles.maskDir, 'Bot\_[0-9]+\.[mM][aA][tT]');
+
+function maskStack = combineTopAndBottomMaskStacks(topMaskStack, botMaskStack, videoSize, topMaskOrigin)
+% videoSize = size of video (H x W x N)
+% topMaskOrigin = the location of the top left corner of the mask in video
+%   frame coordinates
+
+% Create blank video to load mask data into
+maskStack = zeros(videoSize, 'logical');
+% Insert bottom and top masks into empty mask stack array, 
+%   using the given topMaskOrigin to correctly situate the
+%   top mask. The bottom mask is always nestled in the bottom
+%   left corner of the video.
+[hBot, wBot, ~] = size(botMaskStack);
+[hTop, wTop, ~] = size(topMaskStack);
+hVid = videoSize(1);
+wVid = videoSize(2);
+if (topMaskOrigin(1) + wTop - 1) > wVid
+    % Mask has been shifted right such that right edge is off the video. Trim it.
+    overhang = (topMaskOrigin(1) + wTop - 1) - wVid;
+    topMaskStack = topMaskStack(:, 1:end-overhang, :);
+    wTop = wTop - overhang;
+end
+if topMaskOrigin(1) < 1
+    % Mask has been shifted left such that left edge is off the video. Trim it.
+    overhang = 1 - topMaskOrigin(1);
+    topMaskOrigin(1) = 1;
+    topMaskStack = topMaskStack(:, overhang+1:end, :);
+    wTop = wTop - overhang;
+end
+if topMaskOrigin(2) < 1
+    % Mask has been shifted up such that top edge is off the video. Trim it.
+    overhang = 1 - topMaskOrigin(2);
+    topMaskOrigin(2) = 1;
+    topMaskStack = topMaskStack(overhang+1:end, :, :);
+    hTop = hTop - overhang;
+end
+
+% Paste the top mask data into the right place in the full mask stack
+maskStack(topMaskOrigin(2):(hTop + topMaskOrigin(2)-1), topMaskOrigin(1):(topMaskOrigin(1) + wTop - 1), :) = topMaskStack;
+% Paste the bottom mask data into the right place in the full mask stack
+maskStack((hVid - hBot + 1):hVid, 1:wBot, :) = botMaskStack;
+
+function [handles, maskDir] = getMaskDirFromUser(handles)
+% Use last selected maskPath as default directory to start on
+currentPath = handles.maskDir;
+if isempty(currentPath)
+    % Ok, that was empty, try directory in the "currentDirectory" box
+    currentPath = get(handles.currentDirectory, 'String');
+end
+if isempty(currentPath)
+    % Ok, that's empty too, use the default path
+    currentPath = handles.defaultPath;
+end
+if isempty(currentPath)
+    % Ok, that's empty, let's use the MATLAB present working directory
+    currentPath = pwd();
+end
+maskDir = uigetdir(currentPath,'Select a directory containing mask stacks to overlay. Note that masks must be named so they alphabetically sort the same way as the videos.');
+if maskDir == 0
+    return;
+end
+handles.maskDir = maskDir;
+
+function handles = loadMasks(handles)
+handles.maskData = [];
+handles = loadCurrentMaskStack(handles);
+
+function handles = unloadMasks(handles)
+handles.maskData = [];
+handles.maskDir = '';
+
+% --- Executes on button press in loadMasks.
+function loadMasks_Callback(hObject, eventdata, handles)
+% hObject    handle to loadMasks (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+[handles, newMaskDir] = getMaskDirFromUser(handles);
+if newMaskDir == 0
+    % User cancelled
+    return;
+end
+handles = loadMasks(handles);
+if ~handles.showMasks
+    handles = setShowMasks(handles, true);
+end
+handles = updateDisplay(handles);
+guidata(hObject, handles);
+
+function handles = setShowMasks(handles, newShowMasks)
+oldShowMasks = handles.showMasks;
+handles.showMasksCheckbox.Value = newShowMasks;
+
+if ~oldShowMasks && newShowMasks
+    % Show masks was not checked, but now it is
+    % If mask stack is empty, load masks 
+    if isempty(handles.maskDir)
+        handles = getMaskDirFromUser(handles);
+    end
+    if isempty(handles.maskData)
+        handles = loadMasks(handles);
+    end
+end
+handles.showMasks = newShowMasks;
+
+% --- Executes on button press in showMasksCheckbox.
+function showMasksCheckbox_Callback(hObject, eventdata, handles)
+% hObject    handle to showMasksCheckbox (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of showMasksCheckbox
+handles = setShowMasks(handles, handles.showMasksCheckbox.Value);
+handles = updateDisplay(handles);
+guidata(hObject, handles);
+
+% --- Executes on button press in configMasksButton.
+function configMasksButton_Callback(hObject, eventdata, handles)
+% hObject    handle to configMasksButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+x = num2str(handles.topMaskOrigin(1));
+y = num2str(handles.topMaskOrigin(2));
+answers = inputdlg({'X coordinate of upper-left corner of top mask in video coordinates (imshift)', 'Y coordinate of upper-left corner of top mask in video coordinates (top_y0)'}, 'Please input the top mask origin in video coordinates', 1, {x, y});
+if isempty(answers)
+    % User pressed cancel
+    return
+else
+    % User pressed ok
+    handles.topMaskOrigin = [str2double(answers{1}), str2double(answers{2})];
+    handles = updateDisplay(handles);
+    handles = loadCurrentMaskStack(handles);
+    guidata(hObject, handles);
+end
+
+% --- Executes on slider movement.
+function maskTransparencySlider_Callback(hObject, eventdata, handles)
+% hObject    handle to maskTransparencySlider (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'Value') returns position of slider
+%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
+handles.maskTransparency = 1 - get(hObject,'Value');
+handles = updateDisplay(handles);
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function maskTransparencySlider_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to maskTransparencySlider (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: slider controls usually have a light gray background.
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
