@@ -202,7 +202,7 @@ handles.maskDir = '';
 handles.maskData = [];
 handles.showMasks = handles.showMasksCheckbox.Value;
 handles.topMaskOrigin = [1, 1];
-handles.maskTransparency = 0.25;
+handles.maskTransparency = 0.85;
 
 % Set stop freehand drawing callback
 set(handles.figure1, 'WindowButtonUpFcn', @windowButtonUpHandler);
@@ -2682,19 +2682,9 @@ function handles = loadCurrentMaskStack(handles)
 % Get the index of the currently loaded video file, assuming the masks are
 %   in the same alphabetical order as the videos.
 [~, ~, fileIndex] = getCurrentVideoFileSelection(handles);
-disp('current file index:')
-disp(fileIndex)
 % Get the paths to the current top and bottom mask stacks
 currentTopMaskPath = topMaskList{fileIndex};
 currentBotMaskPath = botMaskList{fileIndex};
-disp('Top mask list:')
-disp(topMaskList')
-disp('Picked:')
-disp(currentTopMaskPath)
-disp('Bot mask list:')
-disp(botMaskList')
-disp('Picked:')
-disp(currentBotMaskPath)
 
 % Load top mask stack from file
 s = load(currentTopMaskPath);
