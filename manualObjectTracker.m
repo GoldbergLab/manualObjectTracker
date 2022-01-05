@@ -22,7 +22,7 @@ function varargout = manualObjectTracker(varargin)
 
 % Edit the above text to modify the response to help manualObjectTracker
 
-% Last Modified by GUIDE v2.5 30-Nov-2021 16:32:42
+% Last Modified by GUIDE v2.5 04-Jan-2022 13:46:45
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -341,6 +341,7 @@ function userROIData = createNewUserROIData(numFrames, numROIs)
 [userROIData.xProj, userROIData.zProj] = createBlankROIs(numFrames, 1);
 userROIData.absent = createBlankAbsentData(numFrames, numROIs);
 userROIData.stats = createBlankStatsData(numFrames, numROIs);
+userROIData.tags = createBlankTagData(numFrames);
 
 function handles = unloadVideoOrImage(handles)
 % Reset all ROI data
@@ -349,6 +350,7 @@ if any(strcmp(handles.currUser, fieldnames(handles.ROIData)))
     [handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
     [handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
     handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
+    handles.ROIData.(handles.currUser).tags = createBlankTagData(handles.numFrames);
 end
 handles.k = 1;
 handles = updateDisplay(handles);
@@ -415,6 +417,7 @@ end
 [handles.ROIData.(handles.currUser).xFreehands, handles.ROIData.(handles.currUser).yFreehands] = createBlankROIs(handles.numFrames, handles.numROIs);
 [handles.ROIData.(handles.currUser).xProj, handles.ROIData.(handles.currUser).zProj] = createBlankROIs(handles.numFrames, handles.numROIs);
 handles.ROIData.(handles.currUser).absent = createBlankAbsentData(handles.numFrames, handles.numROIs);
+handles.ROIData.(handles.currUser).tags = createBlankTagData(handles.numFrames);
 handles.k = 1;
 
 resetZoom = false;
@@ -513,6 +516,14 @@ else
     blankAbsentData = [];
 end
 
+function blankTagData = createBlankTagData(numFrames)
+% Create blank datastructure for holding frame tag data
+if numFrames > 0
+    blankTagData = repmat({{}}, 1, numFrames);
+else
+    blankTagData = {};
+end
+
 function handles = noteThatChangesNeedToBeSaved(handles)
 %disp('Marking that there are changes that need saving')
 % st = dbstack('-completenames');
@@ -580,6 +591,9 @@ function KeyPress(~, EventData, hObject, ~)
 % Handle various key press events
 handles = guidata(hObject);
 switch EventData.Key
+    case 't'
+        % Edit frame tags
+        handles = editCurrentTags(handles);
     case 'shift'
         handles.shiftDown = true;
     case cellfun(@(x) num2str(x), num2cell(1:handles.numROIs), 'UniformOutput', false)
@@ -934,6 +948,14 @@ set(handles.sliderGrabBar, 'Position', [val, 0, handles.sliderGrabBarWidth, 1]);
 
 handles = updateDisplay(handles);
 
+function handles = setTagDisplay(handles, tags)
+% Set tag display
+set(handles.tagText, 'String', tags);
+
+function handles = updateTagDisplay(handles)
+% Set tag display to the current tags
+handles = setTagDisplay(handles, handles.ROIData.(handles.currUser).tags{handles.k});
+
 function handles = updateDisplay(handles)
 % Master function that updates the entire GUI (mostly the stuff drawn on the axes) as is necessary
 k = handles.k;
@@ -942,6 +964,9 @@ if handles.numFrames == 0
     set(handles.hImage, 'CData', []);
     return;
 end
+
+% Update tag text
+handles = updateTagDisplay(handles);
 
 % Display the current video frame
 frame = handles.videoData(:, :, k);
@@ -1751,6 +1776,12 @@ if proceed
                     % ones
                     data.outputStruct.ROIData.(u).stats = createBlankStatsData(handles.numFrames, handles.numROIs);
                 end
+                
+                if ~isfield(data.outputStruct.ROIData.(u), 'tags')
+                    % Legacy format doesn't have tags field. Create blank
+                    % ones.
+                    data.outputStruct.ROIData.(u).tags = createBlankTagData(handles.numFrames);
+                end
             end
             
             % .mat file format is compatible. Load ROIs
@@ -1769,6 +1800,7 @@ if proceed
         disp('Error, ROI file structure not recognized.');
     end
     
+
     handles = noteThatChangesDoNotNeedToBeSaved(handles);
     disp(['Successfully loaded ROIs from file: ', ROIfilename])
 end
@@ -2341,7 +2373,7 @@ function figure1_DeleteFcn(hObject, eventdata, handles)
 
 
 function handles = updateROIStatDisplay(handles)
-areaText = '';
+areaText = {};
 %frameSize = size(handles.videoData(:, :, handles.k));
 %widthPixels = frameSize(2);
 
@@ -2411,11 +2443,17 @@ for n = 1:handles.numROIs
     end
     handles.ROIData.(handles.currUser).stats.areaPixels(n, handles.k) = areaPixels;
     handles.ROIData.(handles.currUser).stats.areaUnits(n, handles.k) = areaUnits;
-    
-    areaText = [areaText, num2str(areaUnits), ' ', unit, '² '];
+    areaText{end+1} = sprintf('%.02f %s²', areaUnits, unit);
 end
 set(handles.ROIAreas, 'String', areaText);
 handles = noteThatChangesNeedToBeSaved(handles);
+
+function handles = updateScaleUnitSelector(handles)
+scaleUnitList = cellstr(get(handles.scaleUnitSelector, 'String'));
+scaleUnit = scaleUnitList{get(handles.scaleUnitSelector, 'Value')};
+handles.ROIData.(handles.currUser).stats.scaleUnit = scaleUnit;
+handles = noteThatChangesNeedToBeSaved(handles);
+handles = updateDisplay(handles);
 
 % --- Executes on selection change in scaleUnitSelector.
 function scaleUnitSelector_Callback(hObject, eventdata, handles)
@@ -2426,11 +2464,7 @@ function scaleUnitSelector_Callback(hObject, eventdata, handles)
 % Hints: contents = cellstr(get(hObject,'String')) returns scaleUnitSelector contents as cell array
 %        contents{get(hObject,'Value')} returns selected item from scaleUnitSelector
 handles = guidata(hObject);
-scaleUnitList = cellstr(get(handles.scaleUnitSelector, 'String'));
-scaleUnit = scaleUnitList{get(handles.scaleUnitSelector, 'Value')};
-handles.ROIData.(handles.currUser).stats.scaleUnit = scaleUnit;
-handles = noteThatChangesNeedToBeSaved(handles);
-handles = updateDisplay(handles);
+handles = updateScaleUnitSelector(handles);
 guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
@@ -2451,7 +2485,8 @@ function startScaleMeasureButton_Callback(hObject, eventdata, handles)
 % hObject    handle to startScaleMeasureButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-toggleDistanceMeasurement(hObject);
+handles = toggleDistanceMeasurement(handles);
+guidata(hObject, handles);
 
 function unitScaleMeasurement_Callback(hObject, eventdata, handles)
 % hObject    handle to unitScaleMeasurement (see GCBO)
@@ -2828,8 +2863,8 @@ if isempty(answers)
 else
     % User pressed ok
     handles.topMaskOrigin = [str2double(answers{1}), str2double(answers{2})];
-    handles = updateDisplay(handles);
     handles = loadCurrentMaskStack(handles);
+    handles = updateDisplay(handles);
     guidata(hObject, handles);
 end
 
@@ -2855,3 +2890,41 @@ function maskTransparencySlider_CreateFcn(hObject, eventdata, handles)
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
+
+
+
+function tagText_Callback(hObject, eventdata, handles)
+% hObject    handle to tagText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of tagText as text
+%        str2double(get(hObject,'String')) returns contents of tagText as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function tagText_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to tagText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function handles = editCurrentTags(handles)
+% Edit the tags for the current frame
+currentTags = handles.ROIData.(handles.currUser).tags{handles.k};
+newTags = editTags(currentTags, 'Information and stuff!');
+handles.ROIData.(handles.currUser).tags{handles.k} = newTags;
+
+% --- Executes on button press in tagEditButton.
+function tagEditButton_Callback(hObject, eventdata, handles)
+% hObject    handle to tagEditButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+handles = editCurrentTags(handles);
+guidata(hObject, handles);
