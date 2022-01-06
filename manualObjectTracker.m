@@ -154,7 +154,7 @@ set(handles.figure1, 'WindowButtonMotionFcn', @mouseMotionHandler);
 handles.output = [];
 
 % Timer that controls video playback timing
-handles.timer = timer('TimerFcn', {@timerChangeFrame, hObject},'Period', 0.01, 'ExecutionMode', 'fixedRate');
+handles.timer = timer('TimerFcn', {@timerChangeFrame, hObject},'Period', 0.03, 'ExecutionMode', 'fixedRate');
 
 % Flag that controls whether or not mouse motion invokes drawing function
 handles.currentlyFreehandDrawing = false;
@@ -913,9 +913,9 @@ if ~isROIClosed(x, y)
     y(end+1) = y(1);
 end
 
-function timerChangeFrame(~, ~, hObject, mode, value, varargin)
+function timerChangeFrame(~, ~, hObject)
 handles = guidata(hObject);
-handles = changeFrame(handles, mode, value, varargin{:});
+handles = changeFrame(handles, 'delta', 1);
 guidata(hObject, handles);
 
 function handles = changeFrame(handles, mode, value, varargin)
@@ -1918,6 +1918,14 @@ handles.ROIData.(user) = createNewUserROIData(handles.numFrames, handles.numROIs
 handles.hROI.(user) = newUserROIHandleData;
 handles = noteThatChangesNeedToBeSaved(handles);
 
+function frameNums = findTag(handles, tagName)
+frameNums = [];
+for k = 1:handles.numFrames
+    if any(strcmp(tagName, handles.ROIData.(handles.currUser).tags{k}))
+        frameNums(end+1) = k;
+    end
+end
+
 function jumpToFrameBox_Callback(hObject, ~, handles)
 % hObject    handle to jumpToFrameBox (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -1925,7 +1933,26 @@ function jumpToFrameBox_Callback(hObject, ~, handles)
 
 % Hints: get(hObject,'String') returns contents of jumpToFrameBox as text
 %        str2double(get(hObject,'String')) returns contents of jumpToFrameBox as a double
-newFrame = str2double(get(handles.jumpToFrameBox,'String'));
+jumpTarget = get(handles.jumpToFrameBox, 'String');
+[newFrame, isNum] = str2num(jumpTarget);
+if ~isNum
+    % Jump target must be a tag, rather than a frame number
+    % Find frame nums of frames that have the specified tag
+    frameNums = findTag(handles, jumpTarget);
+    if isempty(frameNums)
+        % Tag not found
+        msgbox(sprintf('Tag %s not found in this file.', jumpTarget));
+        return;
+    else
+        newFrameIdx = find(frameNums>handles.k, 1);
+        if isempty(newFrameIdx)
+            % Loop back to beginning
+            newFrame = frameNums(1);
+        else
+            newFrame = frameNums(newFrameIdx);
+        end
+    end
+end
 handles = changeFrame(handles, 'absolute', newFrame);
 handles = updateDisplay(handles);
 guidata(hObject, handles);
@@ -2338,6 +2365,7 @@ function helpdialog(handles)
         '  ctl-shift-v      - paste all copied ROIs, potentially overwriting', ...
         '                     all ROIs in this frame', ...
         '  m                - toggle show mask overlay', ...
+        '  t                - add (or remove) a tag to the current frame', ...
         '', ...
         '  Written by Brian Kardon bmk27@cornell.edu 2018'...
         '', ...
