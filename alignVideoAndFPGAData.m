@@ -120,8 +120,9 @@ for sessionNum=1:numel(sessionVideoRoots)
     tdiff_video{sessionNum} = diff(trial_time);
 end
 
-for sessionNum=1:min([numel(FPGADataRoots), maxDiffs])
+for sessionNum=1:numel(FPGADataRoots)
     fprintf('Gathering FPGA trial times for session #%d of %d...\n', sessionNum, numel(FPGADataRoots));
     load(fullfile(FPGADataRoots{sessionNum},'lick_struct.mat'), 'lick_struct');
-    tdiff_fpga{sessionNum} = diff([lick_struct.real_time]);
+    numDiffs = min([length(lick_struct), maxDiffs]);
+    tdiff_fpga{sessionNum} = diff([lick_struct(1:numDiffs).real_time]);
 end
