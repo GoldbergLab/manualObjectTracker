@@ -1,4 +1,4 @@
-function startingTrialNums = alignVideoAndFPGAData(sessionVideoRoots, FPGADataRoots)
+function startingTrialNums = alignVideoAndFPGAData(videoRootDirectories, lickStructFiles)
 
 f = figure('Units', 'normalized', 'Position', [0.1, 0, 0.8, 0.85]);
 % Overwrite function close callback to prevent user from
@@ -18,7 +18,7 @@ acceptButton = uicontrol(f, 'Position',[10 10 200 20],'String','Accept trial ali
 % smaller the number, the faster the interface can be prepared.
 maxDiffs = 50;
 
-[tdiffs.FPGA, tdiffs.Video] = get_tdiff_video(sessionVideoRoots, FPGADataRoots, maxDiffs);
+[tdiffs.FPGA, tdiffs.Video] = get_tdiff_video(videoRootDirectories, lickStructFiles, maxDiffs);
 
 sgtitle({'For each session, select the earliest starting trial interval',...
          'for FPGA and Video trials so they line up with each other.',...
@@ -31,9 +31,9 @@ f.UserData.faceColors.Video = 'c';
 f.UserData.yVal.FPGA = 0;
 f.UserData.yVal.Video = 0.5;
 f.UserData.h = 0.5;
-for sessionNum = 1:numel(sessionVideoRoots)
-    fprintf('Preparing interface for session #%d of %d...\n', sessionNum, numel(sessionVideoRoots));
-    ax(sessionNum) = subplot(numel(sessionVideoRoots), 1, sessionNum, 'HitTest', 'off', 'YLimMode', 'manual');
+for sessionNum = 1:numel(videoRootDirectories)
+    fprintf('Preparing interface for session #%d of %d...\n', sessionNum, numel(videoRootDirectories));
+    ax(sessionNum) = subplot(numel(videoRootDirectories), 1, sessionNum, 'HitTest', 'off', 'YLimMode', 'manual');
     hold(ax(sessionNum), 'on');
     ax(sessionNum).UserData = struct();
     ax(sessionNum).UserData.selectedRectangle = struct();
@@ -65,7 +65,7 @@ for sessionNum = 1:numel(sessionVideoRoots)
     xmax = max(xmaxSeries);
     xlim(ax(sessionNum), [-0.05*xmax, xmax]);
 %                 plot(ax(sessionNum), 1:numel(tdiff_FPGA), tdiff_FPGA, 1:numel(tdiff_Video), tdiff_Video);
-    title(ax(sessionNum),abbreviateText(sessionVideoRoots{sessionNum}, 120), 'Interpreter', 'none', 'HitTest', 'off');
+    title(ax(sessionNum),abbreviateText(videoRootDirectories{sessionNum}, 120), 'Interpreter', 'none', 'HitTest', 'off');
     yticks(ax(sessionNum), [])
 end
 % Waits until accept button is clicked
@@ -77,7 +77,7 @@ if ~isvalid(f)
 end
 % Collect results from GUI into struct array
 startingTrialNums = struct();
-for sessionNum = 1:numel(sessionVideoRoots)
+for sessionNum = 1:numel(videoRootDirectories)
     for seriesNum = 1:numel(f.UserData.seriesList)
         series = f.UserData.seriesList{seriesNum};
         startingTrialNums(sessionNum).(series) = ax(sessionNum).UserData.StartingTrialNum.(series);
@@ -96,7 +96,7 @@ function customCloseReqFcn(src, callbackdata)
             return;
     end
 
-function [tdiff_fpga, tdiff_video] = get_tdiff_video(sessionVideoRoots, FPGADataRoots, maxDiffs)
+function [tdiff_fpga, tdiff_video] = get_tdiff_video(videoRootDirectories, lickStructFiles, maxDiffs)
 % maxDiffs is normally Inf. If an integer, then it limits the # of diffs
 % returned. This is for performance, as it can take a long time to
 % graphically represent thousands of diffs, and is unnecessary, as the
@@ -104,10 +104,10 @@ function [tdiff_fpga, tdiff_video] = get_tdiff_video(sessionVideoRoots, FPGAData
 if ~exist('maxDiffs', 'var') || isempty(maxDiffs)
     maxDiffs = Inf;
 end
-for sessionNum=1:numel(sessionVideoRoots)
-    fprintf('Gathering video times for session #%d of %d...\n', sessionNum, numel(sessionVideoRoots));
+for sessionNum=1:numel(videoRootDirectories)
+    fprintf('Gathering video times for session #%d of %d...\n', sessionNum, numel(videoRootDirectories));
     trial_time = [];
-    videoList = dir([sessionVideoRoots{sessionNum},'\*.avi']);
+    videoList = dir([videoRootDirectories{sessionNum},'\*.avi']);
     for videoNum=1:min([numel(videoList), maxDiffs])
         [~, videoName, ~] = fileparts(videoList(videoNum).name);
         videoNameParts = strsplit(videoName);
@@ -118,13 +118,17 @@ for sessionNum=1:numel(sessionVideoRoots)
         trial_time(videoNum) = hours/24 + minutes/(24*60)+seconds/(24*60*60);
     end
     tdiff_video{sessionNum} = diff(trial_time);
+    fprintf('\tRoot: %s\n', videoRootDirectories{sessionNum});
+    fprintf('\t# diffs: %d\n', length(tdiff_video{sessionNum}));
 end
 
-for sessionNum=1:numel(FPGADataRoots)
-    fprintf('Gathering FPGA trial times for session #%d of %d...\n', sessionNum, numel(FPGADataRoots));
-    load(fullfile(FPGADataRoots{sessionNum},'lick_struct.mat'), 'lick_struct');
+for sessionNum=1:numel(lickStructFiles)
+    fprintf('Gathering FPGA trial times for session #%d of %d...\n', sessionNum, numel(lickStructFiles));
+    load(lickStructFiles{sessionNum}, 'lick_struct');
     numDiffs = min([length(lick_struct), maxDiffs]);
     tdiff_fpga{sessionNum} = diff([lick_struct(1:numDiffs).real_time]);
+    fprintf('\tRoot: %s\n', lickStructFiles{sessionNum});
+    fprintf('\t# diffs: %d\n', length(tdiff_fpga{sessionNum}));
 end
 
 function tdiffRectangleCallback(rectangle, event)
