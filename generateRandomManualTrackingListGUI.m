@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 24-Jun-2021 15:55:40
+% Last Modified by GUIDE v2.5 06-Jan-2022 11:16:29
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -263,11 +263,27 @@ for k = 1:min([length(video), length(fpga)])
     trialAlignment(k).videoStartingFrame = video(k);
 end
 
+function handles = setTrialAlignment(handles, trialAlignment)
+videoStartingFrames = {};
+fpgaStartingFrames = {};
+for k = 1:length(trialAlignment)
+    videoStartingFrames{k} = num2str(trialAlignment(k).videoStartingFrame);
+    fpgaStartingFrames{k} = num2str(trialAlignment(k).fpgaStartingFrame);
+end
+handles.videoAlignmentWithFPGA.String = videoStartingFrames;
+handles.FGPAAlignmentWithVideo.String = fpgaStartingFrames;
+
 function lickStructFilePaths = getLickStructFilePaths(handles)
 lickStructFilePaths = split2DCharArray(handles.lickStructFilePaths.String);
 
+function handles = setLickStructFilePaths(handles, lickStructFilePaths)
+handles.lickStructFilePaths.String = lickStructFilePaths;
+
 function videoRootDirectories = getVideoRootDirectories(handles)
 videoRootDirectories = split2DCharArray(handles.videoRootDirectories.String);
+
+function handles = setVideoRootDirectories(handles, videoRootDirectories)
+handles.videoRootDirectories.String = videoRootDirectories;
 
 function arr = split2DCharArray(arr, rowConverter)
 if ~exist('rowConverter', 'var')
@@ -286,29 +302,47 @@ for row = 1:numDirs
 end
 arr = newArr;
 
+function params = gatherParams(handles)
+saveFilename = 'randomizedAnnotationList.mat';
+
+params = struct();
+params.videoRootDirectories = getVideoRootDirectories(handles);
+params.videoRegex = handles.videoRegex.String;
+params.videoExtensions = handles.videoExtensions.String;
+params.numAnnotations = str2double(handles.numAnnotations.String);
+params.clipDirectory = handles.clipDirectory.String;
+params.clipRadius = str2double(handles.clipRadius.String);
+params.saveFilepath = fullfile(params.clipDirectory, saveFilename);
+
+params.lickStructFilePaths = getLickStructFilePaths(handles);
+params.trialAlignment = getTrialAlignment(handles);
+params.weights.noTongue = str2double(handles.noTongueWeight.String);
+params.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
+params.weights.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
+
+function handles = loadParams(handles, params)
+handles = setVideoRootDirectories(handles, params.videoRootDirectories);
+handles.videoRegex.String = params.videoRegex;
+handles.videoExtensions.String = params.videoExtensions;
+handles.numAnnotations.String = num2str(params.numAnnotations);
+handles.clipDirectory.String = params.clipDirectory;
+handles.clipRadius.String = num2str(params.clipRadius);
+
+handles = setLickStructFilePaths(handles, params.lickStructFilePaths);
+handles = setTrialAlignment(handles, params.trialAlignment);
+
+handles.noTongueWeight.String = num2str(params.weights.noTongue);
+handles.spoutContactWeight.String = num2str(params.weights.spoutContactTongue);
+handles.tongueNoContactWeight.String = num2str(params.weights.noSpoutContactTongue);
+
+
 % --- Executes on button press in runButton.
 function runButton_Callback(hObject, eventdata, handles)
 % hObject    handle to runButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-saveFilename = 'randomizedAnnotationList.mat';
-
-output = struct();
-output.videoRootDirectories = getVideoRootDirectories(handles);
-output.videoRegex = handles.videoRegex.String;
-output.videoExtensions = handles.videoExtensions.String;
-output.numAnnotations = str2double(handles.numAnnotations.String);
-output.clipDirectory = handles.clipDirectory.String;
-output.clipRadius = str2double(handles.clipRadius.String);
-output.saveFilepath = fullfile(output.clipDirectory, saveFilename);
-
-output.lickStructFilePaths = getLickStructFilePaths(handles);
-output.trialAlignment = getTrialAlignment(handles);
-output.weights.noTongue = str2double(handles.noTongueWeight.String);
-output.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
-output.weights.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
-
-handles.output = output;
+params = gatherParams(handles);
+handles.output = params;
 guidata(hObject, handles);
 figure1_CloseRequestFcn(handles.figure1, eventdata, handles)
 
@@ -487,3 +521,36 @@ function tongueNoContactWeight_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+% --- Executes on button press in saveButton.
+function saveButton_Callback(hObject, eventdata, handles)
+% hObject    handle to saveButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+params = gatherParams(handles);
+[name, path] = uiputfile();
+if ~isempty(name) || name == 0
+    filepath = fullfile(path, name);
+    save(filepath, 'params');
+    fprintf('Saved params to file: %s\n', filepath); 
+else
+    disp('Cancelled - parameters were not saved.');
+end
+
+% --- Executes on button press in loadButton.
+function loadButton_Callback(hObject, eventdata, handles)
+% hObject    handle to loadButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+[name, path] = uigetfile();
+if ~isempty(name) || name == 0
+    filepath = fullfile(path, name);
+    S = load(filepath);
+    handles = loadParams(handles, S.params);
+else
+    disp('Cancelled - parameters not loaded.');
+end
+guidata(hObject, handles);
