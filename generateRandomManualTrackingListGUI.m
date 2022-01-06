@@ -255,8 +255,16 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 function trialAlignment = getTrialAlignment(handles)
-video = split2DCharArray(handles.videoAlignmentWithFPGA.String, @(row)str2double(row));
-fpga =  split2DCharArray(handles.FPGAAlignmentWithVideo.String, @(row)str2double(row));
+if ischar(handles.videoAlignmentWithFPGA.String) && ~isvector(handles.videoAlignmentWithFPGA.String)
+    video = split2DCharArray(handles.videoAlignmentWithFPGA.String, @(row)str2double(row));
+else
+    video = cellfun(@str2double, handles.videoAlignmentWithFPGA.String);
+end
+if ischar(handles.FPGAAlignmentWithVideo.String) && ~isvector(handles.FPGAAlignmentWithVideo.String)
+    fpga = split2DCharArray(handles.FPGAAlignmentWithVideo.String, @(row)str2double(row));
+else
+    fpga = cellfun(@str2double, handles.FPGAAlignmentWithVideo.String);
+end
 trialAlignment = struct();
 for k = 1:min([length(video), length(fpga)])
     trialAlignment(k).fpgaStartingFrame = fpga(k);
@@ -274,13 +282,23 @@ handles.videoAlignmentWithFPGA.String = videoStartingFrames;
 handles.FPGAAlignmentWithVideo.String = fpgaStartingFrames;
 
 function lickStructFilePaths = getLickStructFilePaths(handles)
-lickStructFilePaths = split2DCharArray(handles.lickStructFilePaths.String);
+if ischar(handles.lickStructFilePaths.String) && ~isvector(handles.lickStructFilePaths.String)
+    lickStructFilePaths = split2DCharArray(handles.lickStructFilePaths.String);
+else
+    lickStructFilePaths = handles.lickStructFilePaths.String;
+end
 
 function handles = setLickStructFilePaths(handles, lickStructFilePaths)
 handles.lickStructFilePaths.String = lickStructFilePaths;
 
 function videoRootDirectories = getVideoRootDirectories(handles)
-videoRootDirectories = split2DCharArray(handles.videoRootDirectories.String);
+if ischar(handles.videoRootDirectories.String) && ~isvector(handles.videoRootDirectories.String)
+    % MATLAB is giving it to us as a 2D char array. Convert to cell array
+    videoRootDirectories = split2DCharArray(handles.videoRootDirectories.String);
+else
+    % MATLAB is giving it to us as a cell array
+    videoRootDirectories = handles.videoRootDirectories.String;
+end
 
 function handles = setVideoRootDirectories(handles, videoRootDirectories)
 handles.videoRootDirectories.String = videoRootDirectories;
