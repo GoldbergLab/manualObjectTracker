@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 06-Jan-2022 11:16:29
+% Last Modified by GUIDE v2.5 06-Jan-2022 11:37:49
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -271,7 +271,7 @@ for k = 1:length(trialAlignment)
     fpgaStartingFrames{k} = num2str(trialAlignment(k).fpgaStartingFrame);
 end
 handles.videoAlignmentWithFPGA.String = videoStartingFrames;
-handles.FGPAAlignmentWithVideo.String = fpgaStartingFrames;
+handles.FPGAAlignmentWithVideo.String = fpgaStartingFrames;
 
 function lickStructFilePaths = getLickStructFilePaths(handles)
 lickStructFilePaths = split2DCharArray(handles.lickStructFilePaths.String);
@@ -417,7 +417,19 @@ function alignFPGAWithVideoButton_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+videoRootDirectories = getVideoRootDirectories(handles);
+FPGARootDirectories = getLickStructFilePaths(handles);
 
+alignment = alignVideoAndFPGAData(videoRootDirectories, FPGARootDirectories);
+% Gotta change field names for legacy reasons.
+for k = 1:length(alignment)
+    startingTrialNums(k).fpgaStartingFrame = alignment(k).FPGA;
+    startingTrialNums(k).videoStartingFrame = alignment(k).Video;
+end
+
+handles = setTrialAlignment(handles, startingTrialNums);
+
+guidata(hObject, handles);
 
 function FPGAAlignmentWithVideo_Callback(hObject, eventdata, handles)
 % hObject    handle to FPGAAlignmentWithVideo (see GCBO)
