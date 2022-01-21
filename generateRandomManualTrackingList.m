@@ -72,18 +72,32 @@ if isempty(videoFilePaths)
     disp(strjoin([{'Warning, no files found for video identifier'}, extensions], ' '))
 end
 
-% Trim lick_struct and video list starts so they start on the corresponding
-% trial (as identified by user) and ends so they have the same # of
-% elements
-numSessions = min([length(videoFilePaths), length(lickStructFilePaths), length(trialAlignment)]);
-for videoNum = 1:numSessions
-    videoFilePaths{videoNum} = videoFilePaths{videoNum}(trialAlignment(videoNum).videoStartingFrame:end);
-    lickStructs(videoNum).lick_struct = lickStructs(videoNum).lick_struct(trialAlignment(videoNum).fpgaStartingFrame:end);
+sessionIdxToDelete = [];
 
-    numTrials = min([length(videoFilePaths{videoNum}), length(lickStructs(videoNum).lick_struct)]);
-    videoFilePaths{videoNum} = videoFilePaths{videoNum}(1:numTrials);
-    lickStructs(videoNum).lick_struct = lickStructs(videoNum).lick_struct(1:numTrials);
+numSessions = min([length(videoFilePaths), length(lickStructFilePaths), length(trialAlignment)]);
+for sessionNum = 1:numSessions
+    % Trim lick_struct and video list starts so they start on the corresponding
+    % trial (as identified by user) and ends so they have the same # of
+    % elements
+    videoFilePaths{sessionNum} = videoFilePaths{sessionNum}(trialAlignment(sessionNum).videoStartingFrame:end);
+    lickStructs(sessionNum).lick_struct = lickStructs(sessionNum).lick_struct(trialAlignment(sessionNum).fpgaStartingFrame:end);
+
+    numTrials = min([length(videoFilePaths{sessionNum}), length(lickStructs(sessionNum).lick_struct)]);
+    videoFilePaths{sessionNum} = videoFilePaths{sessionNum}(1:numTrials);
+    lickStructs(sessionNum).lick_struct = lickStructs(sessionNum).lick_struct(1:numTrials);
+
+    % Fix or eliminate lick_structs that lack necessary fields or have
+    % extra ones.
+    [lickStructs(sessionNum).lick_struct, valid] = prepareLickStruct(lickStructs(sessionNum).lick_struct);
+    
+    if ~valid
+        sessionIdxToDelete(end+1) = sessionNum;
+    end
 end
+
+fprintf('Deleting %d sessions due to missing lick_struct fields.\n', length(sessionIdxToDelete));
+lickStructs(sessionIdxToDelete) = [];
+videoFilePaths(sessionIdxToDelete) = [];
 
 % Concatenate video paths and lick structs into one long list
 videoFilePaths = horzcat(videoFilePaths{:});
@@ -121,17 +135,33 @@ disp('Determining video lengths...');
 videoLengths = zeros(1, length(videoFilePaths));
 
 invalidIndices = [];
+% Build up database of how long videos are in each session, for speed
+sessionVideoLengths = cell(1, length(videoBaseDirectories));
 for videoNum = 1:length(videoFilePaths)
-    disp(['Determining length of video #', num2str(videoNum), ' of ', num2str(length(videoFilePaths))])
+    [videoBaseDirectory, ~, ~] = fileparts(videoFilePaths{videoNum});
+    sessionNum = find(strcmp(videoBaseDirectories, videoBaseDirectory));
+    if isempty(sessionNum)
+        error('Identified video does not come from one of the provided paths. Something has gone wrong.');
+    end
+    
+    fprintf('Determining length of video #%d of %d\n', videoNum, length(videoFilePaths));
+    fprintf('\t%s\n', videoFilePaths{videoNum});
     videoFilePath = videoFilePaths{videoNum};
     try
-        videoSize = loadVideoDataSize(videoFilePath);
+        if isempty(sessionVideoLengths{sessionNum})
+            videoSize = loadVideoDataSize(videoFilePath);        
+            sessionVideoLengths{sessionNum} = videoSize;
+        else
+            videoSize = sessionVideoLengths{sessionNum};
+        end
+        
         if videoSize(3) <= 2*clipRadius
             invalidIndices(end+1) = videoNum;
         end
     catch ME
         invalidIndices(end+1) = videoNum;
     end
+    fprintf('\tVideo length = %d\n', videoSize(3));
     videoLengths(videoNum) = videoSize(3); % - 2*clipRadius;
 end
 
@@ -173,20 +203,13 @@ for videoNum = frameTypeIndices
     weights.(frameType) = weights.(frameType) / totalWeight;
 end
 
-getSpoutPos = @(ML, AP)ML+1i*AP;
-
-% Create list of unique spout target positions as complex numbers
-spoutTargets = unique(getSpoutPos([lick_struct.actuator1_ML]', [lick_struct.actuator2_AP]'));
-if length(spoutTargets) ~= 3
-    warning('Expected 3 spout positions, instead found %d.', length(spoutTargets));
-end
-
 % Create corresponding vectors of video numbers, frame numbers, etc
 numFrames = sum(videoLengths);
 overallIdx = 1:numFrames;
 frameIdx = zeros(1, numFrames);
 videoIdx = zeros(1, numFrames);
 
+% Loop over videos and create corresponding lists of spout positions
 tongueTypeMasks.spoutContactTongue = zeros(1, numFrames, 'logical');
 tongueTypeMasks.noSpoutContactTongue = zeros(1, numFrames, 'logical');
 tongueTypeMasks.noTongue = zeros(1, numFrames, 'logical');
@@ -198,15 +221,11 @@ for videoNum = 1:length(videoFilePaths)
     mu = nan(1, videoLengths(videoNum));
     
     idx = 1:videoLengths(videoNum);
-    currentSpoutPos = getSpoutPos(lick_struct(videoNum).actuator1_ML_command, lick_struct(videoNum).actuator2_AP_command);
-    currentSpoutPos = [currentSpoutPos(1)*ones(1, cueTimes(videoNum)), currentSpoutPos];
-    currentSpoutPos = [currentSpoutPos, currentSpoutPos(end)*ones(1, videoLengths(videoNum) - length(currentSpoutPos))];
-    currentSpoutIdx = mu;  % Vector containing the spout target number for each frame.
-    for p = 1:length(spoutTargets)
-        currentSpoutIdx(currentSpoutPos == spoutTargets(p)) = p;
-    end
-    if any(isnan(currentSpoutPos))
-        badPos = unique(currentSpoutPos(isnan(currentSpoutIdx)));
+    currentSpoutIdx = lick_struct(videoNum).spoutPosition;
+    currentSpoutIdx = [currentSpoutIdx(1)*ones(1, cueTimes(videoNum)), currentSpoutIdx];
+    currentSpoutIdx = [currentSpoutIdx, currentSpoutIdx(end)*ones(1, videoLengths(videoNum) - length(currentSpoutIdx))];
+    if any(isnan(currentSpoutIdx))
+        badPos = unique(currentSpoutIdx(isnan(currentSpoutIdx)));
         error('Could not find some of this trial''s spout positions in list - %s. Something went wrong.', num2str(badPos));
     end
 
@@ -227,6 +246,11 @@ for videoNum = 1:length(videoFilePaths)
     end
     
     startFrame = endFrame + 1;
+end
+
+spoutTargets = unique(spoutPos);
+if length(spoutTargets) ~= 3
+    warning('Expected three spout positions, instead found %d.', length(spoutTargets));
 end
 
 % Determine how many frame types we're balancing the randomization across
@@ -332,3 +356,76 @@ function bestDivisions = fairestDivision(num, divisor)
 bestDivisions = ones(1, divisor) * floor(num/divisor);
 remainder = mod(num, divisor);
 bestDivisions(1:remainder) = bestDivisions(1:remainder) + 1;
+
+function [lick_struct, valid] = prepareLickStruct(lick_struct)
+
+fns = fieldnames(lick_struct);
+
+% Create list of ML targets
+if any(strcmp('actuator1_ML', fns))
+    % Targets exist, get a list of them
+    MLTargets = sort(unique([lick_struct.actuator1_ML]));
+    if ~any(strcmp('actuator1_ML_command', fns))
+        % No command vectors - create dummy constant command ones
+        for k = 1:length(lick_struct)
+            lick_struct(k).actuator1_ML_command = repmat(lick_struct(k).actuator1_ML, [1, diff(lick_struct(k).rw_cue)+1]);
+        end
+    end
+else
+    % Targets do not exist, let's infer them
+    if any(strcmp('actuator1_ML_command', fns))
+        % Commands exist - get targets from command vectors instead
+        MLTargets = sort(unique([lick_struct.actuator1_ML_command]));
+        % Infer actuator targets
+        for k = 1:length(lick_struct)
+            lick_struct(k).actuator1_ML = lick_struct(k).actuator1_ML_command(end);
+        end
+    else
+        % No targets or commands - create dummy ones
+        MLTargets = 0;
+        for k = 1:length(lick_struct)
+            lick_struct(k).actuator1_ML_command = repmat(0, [1, diff(lick_struct(k).rw_cue)+1]);
+        end
+    end
+end
+if length(MLTargets) == 1
+    disp('Warning, session found with only one unique ML actuator.');
+    MLTargets = [NaN, MLTargets, NaN];
+elseif length(MLTargets) == 2
+    disp('Warning, session found with only two unique ML actuator targets.');
+    MLTargets = [MLTargets(1), MLTargets(2), NaN];
+end
+
+% Convert actuator commands to target indices
+for k = 1:length(lick_struct)
+    lick_struct(k).spoutPosition = arrayfun(@(ML)find(MLTargets==ML), lick_struct(k).actuator1_ML_command);
+end
+
+if ~any(strcmp('analog_lick', fns))
+    % Add dummy analog lick field
+    for k = 1:length(lick_struct)
+        lick_struct(k).analog_lick = repmat(NaN, [1, diff(lick_struct(k).rw_cue)+1]);
+    end
+end
+
+allowedLickStructFields = {'spoutPosition', 'analog_lick', 'rw_cue'};
+valid = true;
+
+% Trim lick_struct down to the necessary fields
+fns = fieldnames(lick_struct);
+for k = 1:length(fns)
+    if ~any(strcmp(fns{k}, allowedLickStructFields)) 
+        lick_struct = rmfield(lick_struct, fns{k}); 
+    end
+end
+
+fns = fieldnames(lick_struct);
+for k = 1:length(allowedLickStructFields)
+    if ~any(strcmp(allowedLickStructFields{k}, fns))
+        % Lick struct lacks a necessary field. Mark this session for
+        % elimination
+        disp([allowedLickStructFields{k}, ' missing']);
+        valid = false;
+        break;
+    end
+end
