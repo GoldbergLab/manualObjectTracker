@@ -590,6 +590,12 @@ end
 function KeyPress(~, EventData, hObject, ~)
 % Handle various key press events
 handles = guidata(hObject);
+
+if ~any(strcmp(EventData.Modifier, 'shift'))
+    % Help catch error where shift release event isn't caught.
+    handles.shiftDown = false;
+end
+
 switch EventData.Key
     case 't'
         % Edit frame tags
@@ -638,6 +644,10 @@ switch EventData.Key
                 case 'Delete'
                     handles = clearROI(1:handles.numROIs, handles.k, handles);
                     handles = updateDisplay(handles);
+                    % Hacky bugfix - when you press shift-delete, sometimes
+                    % the key release event for the shift key gets missed.
+                    % This fixes that.
+                    handles.shiftDown = false;
                 case 'Cancel'
                     return
             end
