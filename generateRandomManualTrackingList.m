@@ -67,6 +67,7 @@ periContactTongueFrameMargin = 50;
 disp('Finding matching files with correct extension...');
 videoFilePaths = cellfun(@(videoBaseDirectory)findFilesByExtension(videoBaseDirectory, extensions, false), videoBaseDirectories, 'UniformOutput', false);
 lickStructs = cellfun(@(lickStructFilePath)load(lickStructFilePath), lickStructFilePaths, 'UniformOutput', true);
+disp('...done finding matching files with correct extension.');
 
 if isempty(videoFilePaths)
     disp(strjoin([{'Warning, no files found for video identifier'}, extensions], ' '))
@@ -74,8 +75,10 @@ end
 
 sessionIdxToDelete = [];
 
+fprintf('Trimming videos and lick_structs so their start times match...\n');
 numSessions = min([length(videoFilePaths), length(lickStructFilePaths), length(trialAlignment)]);
 for sessionNum = 1:numSessions
+    displayProgress('%d of %d sessions trimmed...\n', sessionNum, numSessions, 10);
     % Trim lick_struct and video list starts so they start on the corresponding
     % trial (as identified by user) and ends so they have the same # of
     % elements
@@ -94,6 +97,7 @@ for sessionNum = 1:numSessions
         sessionIdxToDelete(end+1) = sessionNum;
     end
 end
+fprintf('...done trimming videos and lick_structs so their start times match\n');
 
 fprintf('Deleting %d sessions due to missing lick_struct fields.\n', length(sessionIdxToDelete));
 lickStructs(sessionIdxToDelete) = [];
@@ -131,13 +135,14 @@ end
 disp(['...done. Found ', num2str(length(videoFilePaths)), ' files.']);
 
 % Determine the length of (# of frames in) each video
-disp('Determining video lengths...');
 videoLengths = zeros(1, length(videoFilePaths));
 
 invalidIndices = [];
 % Build up database of how long videos are in each session, for speed
+fprintf('Determining length of videos in each session...\n');
 sessionVideoLengths = cell(1, length(videoBaseDirectories));
 for videoNum = 1:length(videoFilePaths)
+    displayProgress('%d of %d video lengths found...\n', videoNum, length(videoFilePaths), 10);
     [videoBaseDirectory, ~, ~] = fileparts(videoFilePaths{videoNum});
     sessionNum = find(strcmp(videoBaseDirectories, videoBaseDirectory));
     if isempty(sessionNum)
@@ -164,6 +169,7 @@ for videoNum = 1:length(videoFilePaths)
     fprintf('\tVideo length = %d\n', videoSize(3));
     videoLengths(videoNum) = videoSize(3); % - 2*clipRadius;
 end
+fprintf('...done determining length of videos in each session.\n');
 
 if ~isempty(invalidIndices)
     disp(['Warning: Could not find any readable data for the following ', num2str(length(invalidIndices)), ' videos:']);
@@ -219,7 +225,7 @@ spoutPos = nan(1, numFrames);
 startFrame = 1;
 fprintf('Constructing frame type vectors...\n');
 for videoNum = 1:length(videoFilePaths)
-    displayProgress('%d of %d trials analyzed...\n', videoNum, length(videoFilePaths), 10);
+    displayProgress('%d of %d trials analyzed...\n', videoNum, length(videoFilePaths), 50);
     yes = ones(1, videoLengths(videoNum));
     no = zeros(1, videoLengths(videoNum));
     mu = nan(1, videoLengths(videoNum));
