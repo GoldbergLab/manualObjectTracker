@@ -180,6 +180,7 @@ fprintf('Getting cue times...\n');
 defaultCueTime = 1001;
 cueTimes = [];
 for videoNum = 1:length(videoFilePaths)
+    displayProgress('%d of %d cue times found...\n', videoNum, length(videoFilePaths), 10);
     videoName = videoFilePaths{videoNum};
     out = regexp(videoName, '_C([0-9]+)L?\.[aA][vV][iI]$', 'tokens');
     try
@@ -189,6 +190,7 @@ for videoNum = 1:length(videoFilePaths)
         cueTimes(videoNum) = defaultCueTime;
     end
 end
+fprintf('...done getting cue times.\n');
 
 frameTypes = fieldnames(weights);
 frameTypeIndices = 1:length(frameTypes);
@@ -215,7 +217,9 @@ tongueTypeMasks.noSpoutContactTongue = zeros(1, numFrames, 'logical');
 tongueTypeMasks.noTongue = zeros(1, numFrames, 'logical');
 spoutPos = nan(1, numFrames);
 startFrame = 1;
+fprintf('Constructing frame type vectors...\n');
 for videoNum = 1:length(videoFilePaths)
+    displayProgress('%d of %d trials analyzed...\n', videoNum, length(videoFilePaths), 10);
     yes = ones(1, videoLengths(videoNum));
     no = zeros(1, videoLengths(videoNum));
     mu = nan(1, videoLengths(videoNum));
@@ -247,6 +251,7 @@ for videoNum = 1:length(videoFilePaths)
     
     startFrame = endFrame + 1;
 end
+fprintf('...done constructing frame type vectors.\n');
 
 spoutTargets = unique(spoutPos);
 if length(spoutTargets) ~= 3
@@ -262,6 +267,7 @@ numTongueTypes = length(tongueTypes);
 chosenIdx = [];
 
 % Pick random frame numbers, balanced by frame type according to weights
+fprintf('Choosing random frames...\n');
 for spoutIdx = 1:length(spoutTargets)
     for tongueTypeIdx = 1:numTongueTypes
         % get tongue type of this group (no tongue / no contact tongue / tongue with spout contact
@@ -278,6 +284,7 @@ for spoutIdx = 1:length(spoutTargets)
         chosenIdx = [chosenIdx, newChosenIdx];
     end
 end
+fprintf('...done choosing random frames.\n');
 % Due to rounding errors, we don't get quite the number of annotations we
 % want. Just randomly choose the rest.
 numAnnotationsRemaining = numAnnotations - length(chosenIdx);
@@ -302,9 +309,9 @@ if plotFlag
     legend
 end
 
-disp('Extracting data...');
+fprintf('Creating clips...\n');
 for k = 1:length(chosenVideoIdx)
-    fprintf('Completed frame %d of %d\n', k, length(chosenVideoIdx));
+    displayProgress('%d of %d clips created...\n', k, length(chosenVideoIdx), 10);
     % Get info about selected frame
     videoFilePath = videoFilePaths{chosenVideoIdx(k)};
     videoLength = videoLengths(chosenVideoIdx(k));
@@ -345,6 +352,7 @@ for k = 1:length(chosenVideoIdx)
     manualTrackingList(k).originalPath = videoFilePath;
     manualTrackingList(k).origianlFrameNumber = frameNumber;
 end
+fprintf('...done creating clips.\n');
 
 if ~isempty(saveFilepath)
     save(saveFilepath, 'manualTrackingList');
