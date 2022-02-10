@@ -43,6 +43,17 @@ if isstruct(videoBaseDirectoriesOrStruct)
     lickStructFilePaths = p.lickStructFilePaths;
     trialAlignment = p.trialAlignment;
     weights = p.weights;
+    if ~isfield(p, 'enableWeighting')
+        enableWeighting = 1;
+        disp('No enable weighting field found in params. Enabling weighting by default.');
+    else
+        enableWeighting = p.enableWeighting;
+    end
+    if ~isfield(p, 'allVideosSameLength')
+        allVideosSameLength = 1;
+    else
+        allVideosSameLength = p.allVideosSameLength;
+    end
 end
 
 if ~exist('clipDirectory', 'var')
@@ -66,7 +77,9 @@ periContactTongueFrameMargin = 50;
 % Find files that match extension and regex
 disp('Finding matching files with correct extension...');
 videoFilePaths = cellfun(@(videoBaseDirectory)findFilesByExtension(videoBaseDirectory, extensions, false), videoBaseDirectories, 'UniformOutput', false);
-lickStructs = cellfun(@(lickStructFilePath)load(lickStructFilePath), lickStructFilePaths, 'UniformOutput', true);
+if enableWeighting
+    lickStructs = cellfun(@(lickStructFilePath)load(lickStructFilePath), lickStructFilePaths, 'UniformOutput', true);
+end
 disp('...done finding matching files with correct extension.');
 
 if isempty(videoFilePaths)
@@ -76,42 +89,46 @@ end
 sessionIdxToDelete = [];
 
 fprintf('Trimming videos and lick_structs so their start times match...\n');
-numSessions = min([length(videoFilePaths), length(lickStructFilePaths), length(trialAlignment)]);
-for sessionNum = 1:numSessions
-    displayProgress('%d of %d sessions trimmed...\n', sessionNum, numSessions, 10);
-    % Trim lick_struct and video list starts so they start on the corresponding
-    % trial (as identified by user) and ends so they have the same # of
-    % elements
-    videoFilePaths{sessionNum} = videoFilePaths{sessionNum}(trialAlignment(sessionNum).videoStartingFrame:end);
-    lickStructs(sessionNum).lick_struct = lickStructs(sessionNum).lick_struct(trialAlignment(sessionNum).fpgaStartingFrame:end);
+if enableWeighting
+    numSessions = min([length(videoFilePaths), length(lickStructFilePaths), length(trialAlignment)]);
+    for sessionNum = 1:numSessions
+        displayProgress('%d of %d sessions trimmed...\n', sessionNum, numSessions, 10);
+        % Trim lick_struct and video list starts so they start on the corresponding
+        % trial (as identified by user) and ends so they have the same # of
+        % elements
+        videoFilePaths{sessionNum} = videoFilePaths{sessionNum}(trialAlignment(sessionNum).videoStartingFrame:end);
+        lickStructs(sessionNum).lick_struct = lickStructs(sessionNum).lick_struct(trialAlignment(sessionNum).fpgaStartingFrame:end);
 
-    numTrials = min([length(videoFilePaths{sessionNum}), length(lickStructs(sessionNum).lick_struct)]);
-    videoFilePaths{sessionNum} = videoFilePaths{sessionNum}(1:numTrials);
-    lickStructs(sessionNum).lick_struct = lickStructs(sessionNum).lick_struct(1:numTrials);
+        numTrials = min([length(videoFilePaths{sessionNum}), length(lickStructs(sessionNum).lick_struct)]);
+        videoFilePaths{sessionNum} = videoFilePaths{sessionNum}(1:numTrials);
+        lickStructs(sessionNum).lick_struct = lickStructs(sessionNum).lick_struct(1:numTrials);
 
-    % Fix or eliminate lick_structs that lack necessary fields or have
-    % extra ones.
-    [lickStructs(sessionNum).lick_struct, valid] = prepareLickStruct(lickStructs(sessionNum).lick_struct);
-    
-    if ~valid
-        sessionIdxToDelete(end+1) = sessionNum;
+        % Fix or eliminate lick_structs that lack necessary fields or have
+        % extra ones.
+        [lickStructs(sessionNum).lick_struct, valid] = prepareLickStruct(lickStructs(sessionNum).lick_struct);
+
+        if ~valid
+            sessionIdxToDelete(end+1) = sessionNum;
+        end
     end
+    fprintf('...done trimming videos and lick_structs so their start times match\n');
+    
+    fprintf('Deleting %d sessions due to missing lick_struct fields.\n', length(sessionIdxToDelete));
+    lickStructs(sessionIdxToDelete) = [];
+    videoFilePaths(sessionIdxToDelete) = [];
 end
-fprintf('...done trimming videos and lick_structs so their start times match\n');
-
-fprintf('Deleting %d sessions due to missing lick_struct fields.\n', length(sessionIdxToDelete));
-lickStructs(sessionIdxToDelete) = [];
-videoFilePaths(sessionIdxToDelete) = [];
 
 % Concatenate video paths and lick structs into one long list
 videoFilePaths = horzcat(videoFilePaths{:});
-lick_struct = horzcat(lickStructs.lick_struct);
+if enableWeighting
+    lick_struct = horzcat(lickStructs.lick_struct);
 
-% Add in spout contact onset/offsets:
-lick_struct = getContactDur(lick_struct);
+    % Add in spout contact onset/offsets:
+    lick_struct = getContactDur(lick_struct);
 
-if length(videoFilePaths) ~= length(lick_struct)
-    error('Failed to match up lick_struct rows and video paths.');
+    if length(videoFilePaths) ~= length(lick_struct)
+        error('Failed to match up lick_struct rows and video paths.');
+    end
 end
 
 if ischar(videoRegex)
@@ -119,7 +136,9 @@ if ischar(videoRegex)
     regexFilterIdx = 1:length(videoFilePaths);
     regexFilterIdx = regexFilterIdx(~cellfun(@isempty, regexp(videoFilePaths, videoRegex)));
     videoFilePaths = videoFilePaths(regexFilterIdx);
-    lick_struct = lick_struct(regexFilterIdx);
+    if enableWeighting
+        lick_struct = lick_struct(regexFilterIdx);
+    end
 elseif isnumeric(videoRegex)
     % Number rather than regex is passed as videoRegex
     sampleNum = videoRegex;
@@ -127,7 +146,9 @@ elseif isnumeric(videoRegex)
         % If number is not 0, randomly sample that # of videos and lick
         % struct trials
         [videoFilePaths, randomIdx] = datasample(videoFilePaths, sampleNum, 'Replace',false);
-        lick_struct = lick_struct(randomIdx);
+        if enableWeighting
+            lick_struct = lick_struct(randomIdx);
+        end
     end
 else
     error('Warning, invalid videoRegex provided.');
@@ -153,7 +174,9 @@ for videoNum = 1:length(videoFilePaths)
     fprintf('\t%s\n', videoFilePaths{videoNum});
     videoFilePath = videoFilePaths{videoNum};
     try
-        if isempty(sessionVideoLengths{sessionNum})
+        if ~allVideosSameLength || isempty(sessionVideoLengths{sessionNum})
+            % Either we're getting each video length individually, or this
+            % is the first video we've checked in this session.
             videoSize = loadVideoDataSize(videoFilePath);        
             sessionVideoLengths{sessionNum} = videoSize;
         else
@@ -176,40 +199,14 @@ if ~isempty(invalidIndices)
     disp(videoFilePaths(invalidIndices)');
     videoLengths(invalidIndices) = [];
     videoFilePaths(invalidIndices) = [];
-    lick_struct(invalidIndices) = [];
+    if enableWeighting
+        lick_struct(invalidIndices) = [];
+    end
 end
 if isempty(videoFilePaths)
     error('Error - no valid videos found with those parameters. Check the root directory, try changing the file regex, and make sure the extension is valid - it should include a ''.''.')
 end
 
-fprintf('Getting cue times...\n');
-defaultCueTime = 1001;
-cueTimes = [];
-for videoNum = 1:length(videoFilePaths)
-    displayProgress('%d of %d cue times found...\n', videoNum, length(videoFilePaths), 10);
-    videoName = videoFilePaths{videoNum};
-    out = regexp(videoName, '_C([0-9]+)L?\.[aA][vV][iI]$', 'tokens');
-    try
-        cueTimes(videoNum) = str2double(out{1}{1});
-    catch ME
-        warning('Could not determine cue time for video %s based on filename. Defaulting to %d.', videoName, defaultCueTime);
-        cueTimes(videoNum) = defaultCueTime;
-    end
-end
-fprintf('...done getting cue times.\n');
-
-frameTypes = fieldnames(weights);
-frameTypeIndices = 1:length(frameTypes);
-% Calculate cumulative weight for each frame type
-totalWeight = 0;
-for videoNum = frameTypeIndices
-    frameType = frameTypes{videoNum};
-    totalWeight = totalWeight + weights.(frameType);
-end
-for videoNum = frameTypeIndices
-    frameType = frameTypes{videoNum};
-    weights.(frameType) = weights.(frameType) / totalWeight;
-end
 
 % Create corresponding vectors of video numbers, frame numbers, etc
 numFrames = sum(videoLengths);
@@ -217,92 +214,156 @@ overallIdx = 1:numFrames;
 frameIdx = zeros(1, numFrames);
 videoIdx = zeros(1, numFrames);
 
-% Loop over videos and create corresponding lists of spout positions
-tongueTypeMasks.spoutContactTongue = zeros(1, numFrames, 'logical');
-tongueTypeMasks.noSpoutContactTongue = zeros(1, numFrames, 'logical');
-tongueTypeMasks.noTongue = zeros(1, numFrames, 'logical');
-spoutPos = nan(1, numFrames);
+if enableWeighting
+    fprintf('Getting cue times...\n');
+    defaultCueTime = 1001;
+    cueTimes = [];
+    for videoNum = 1:length(videoFilePaths)
+        displayProgress('%d of %d cue times found...\n', videoNum, length(videoFilePaths), 10);
+        videoName = videoFilePaths{videoNum};
+        out = regexp(videoName, '_C([0-9]+)L?\.[aA][vV][iI]$', 'tokens');
+        try
+            cueTimes(videoNum) = str2double(out{1}{1});
+        catch ME
+            warning('Could not determine cue time for video %s based on filename. Defaulting to %d.', videoName, defaultCueTime);
+            cueTimes(videoNum) = defaultCueTime;
+        end
+    end
+    fprintf('...done getting cue times.\n');
+
+    frameTypes = fieldnames(weights);
+    frameTypeIndices = 1:length(frameTypes);
+    % Calculate cumulative weight for each frame type
+    totalWeight = 0;
+    for frameTypeIndex = frameTypeIndices
+        frameType = frameTypes{frameTypeIndex};
+        totalWeight = totalWeight + weights.(frameType);
+    end
+    for frameTypeIndex = frameTypeIndices
+        frameType = frameTypes{frameTypeIndex};
+        disp(frameType)
+        disp(weights.(frameType))
+        weights.(frameType) = weights.(frameType) / totalWeight;
+    end
+
+    % Loop over videos and create corresponding lists of spout positions
+    tongueTypeMasks.spoutContactTongue = zeros(1, numFrames, 'logical');
+    tongueTypeMasks.noSpoutContactTongue = zeros(1, numFrames, 'logical');
+    tongueTypeMasks.noTongue = zeros(1, numFrames, 'logical');
+    spoutPos = nan(1, numFrames);
+end
+
 startFrame = 1;
 fprintf('Constructing frame type vectors...\n');
 for videoNum = 1:length(videoFilePaths)
     displayProgress('%d of %d trials analyzed...\n', videoNum, length(videoFilePaths), 50);
     yes = ones(1, videoLengths(videoNum));
-    no = zeros(1, videoLengths(videoNum));
-    mu = nan(1, videoLengths(videoNum));
+%     no = zeros(1, videoLengths(videoNum));
+%     mu = nan(1, videoLengths(videoNum));
     
     idx = 1:videoLengths(videoNum);
-    currentSpoutIdx = lick_struct(videoNum).spoutPosition;
-    currentSpoutIdx = [currentSpoutIdx(1)*ones(1, cueTimes(videoNum)), currentSpoutIdx];
-    currentSpoutIdx = [currentSpoutIdx, currentSpoutIdx(end)*ones(1, videoLengths(videoNum) - length(currentSpoutIdx))];
-    if any(isnan(currentSpoutIdx))
-        badPos = unique(currentSpoutIdx(isnan(currentSpoutIdx)));
-        error('Could not find some of this trial''s spout positions in list - %s. Something went wrong.', num2str(badPos));
-    end
 
     endFrame = startFrame + videoLengths(videoNum) - 1;
-    spoutPos(startFrame:endFrame) = currentSpoutIdx;
     videoIdx(startFrame:endFrame) = videoNum * yes;
     frameIdx(startFrame:endFrame) = idx;
-    
-    for spoutContactNum = 1:length(lick_struct(videoNum).sp_contact_onset)
-        onset = lick_struct(videoNum).sp_contact_onset(spoutContactNum) + cueTimes(videoNum);
-        offset = lick_struct(videoNum).sp_contact_offset(spoutContactNum) + cueTimes(videoNum);
-        tongueTypeMasks.noSpoutContactTongue(startFrame:endFrame) = ...
-            (((onset - idx) < periContactTongueFrameMargin) & ((onset - idx) > 0)) | ...
-            (((idx - offset) < periContactTongueFrameMargin) & ((idx - offset > 0)));
-        tongueTypeMasks.spoutContactTongue(startFrame:endFrame) = ...
-            ((idx - onset) >= 0) & ((offset - idx) >= 0);
-        tongueTypeMasks.noTongue = ~tongueTypeMasks.noSpoutContactTongue & ~tongueTypeMasks.spoutContactTongue;
+    if enableWeighting
+        currentSpoutIdx = lick_struct(videoNum).spoutPosition;
+        currentSpoutIdx = [currentSpoutIdx(1)*ones(1, cueTimes(videoNum)), currentSpoutIdx];
+        currentSpoutIdx = [currentSpoutIdx, currentSpoutIdx(end)*ones(1, videoLengths(videoNum) - length(currentSpoutIdx))];
+        if any(isnan(currentSpoutIdx))
+            badPos = unique(currentSpoutIdx(isnan(currentSpoutIdx)));
+            error('Could not find some of this trial''s spout positions in list - %s. Something went wrong.', num2str(badPos));
+        end
+        spoutPos(startFrame:endFrame) = currentSpoutIdx;
+
+        for spoutContactNum = 1:length(lick_struct(videoNum).sp_contact_onset)
+            onset = lick_struct(videoNum).sp_contact_onset(spoutContactNum) + cueTimes(videoNum);
+            offset = lick_struct(videoNum).sp_contact_offset(spoutContactNum) + cueTimes(videoNum);
+            tongueTypeMasks.noSpoutContactTongue(startFrame:endFrame) = ...
+                (((onset - idx) < periContactTongueFrameMargin) & ((onset - idx) > 0)) | ...
+                (((idx - offset) < periContactTongueFrameMargin) & ((idx - offset > 0)));
+            tongueTypeMasks.spoutContactTongue(startFrame:endFrame) = ...
+                ((idx - onset) >= 0) & ((offset - idx) >= 0);
+            tongueTypeMasks.noTongue = ~tongueTypeMasks.noSpoutContactTongue & ~tongueTypeMasks.spoutContactTongue;
+        end
     end
     
     startFrame = endFrame + 1;
 end
 fprintf('...done constructing frame type vectors.\n');
 
-spoutTargets = unique(spoutPos);
-if length(spoutTargets) ~= 3
-    warning('Expected three spout positions, instead found %d.', length(spoutTargets));
-end
+if enableWeighting
+    spoutTargets = unique(spoutPos);
+    if length(spoutTargets) ~= 3
+        warning('Expected three spout positions, instead found %d.', length(spoutTargets));
+    end
 
-% Determine how many frame types we're balancing the randomization across
-numGroups = length(spoutTargets) * 3; % (spout L, spout C, spout R) x (tongue w/o contact, tongue w/ contact, no tongue)
-groupSize = numAnnotations/numGroups;
-tongueTypes = fieldnames(tongueTypeMasks);
-numTongueTypes = length(tongueTypes);
+    tongueTypes = fieldnames(tongueTypeMasks);
+    % Determine how many frame types we're balancing the randomization across
+    numTongueTypes = length(tongueTypes);
+%    numGroups = length(spoutTargets) * numTongueTypes; % (spout L, spout C, spout R) x (tongue w/o contact, tongue w/ contact, no tongue)
+    numGroups = 0;
+    % Loop over all group types to count how many there are
+    for spoutTarget = spoutTargets
+        for tongueTypeIdx = 1:numTongueTypes
+            % get tongue type of this group (no tongue / no contact tongue / tongue with spout contact
+            tongueType = tongueTypes{tongueTypeIdx};
+            % Create mask for which indices satisfy this group's criteria
+            groupMask = (spoutPos == spoutTarget) & tongueTypeMasks.(tongueType);
+            if sum(groupMask)*weights.(tongueType) > 0
+                numGroups = numGroups + 1;
+            end
+        end
+    end
+    
+    equalGroupSize = numAnnotations/numGroups;
+    numTongueTypes = length(tongueTypes);
+end
 
 chosenIdx = [];
 
-% Pick random frame numbers, balanced by frame type according to weights
 fprintf('Choosing random frames...\n');
-for spoutIdx = 1:length(spoutTargets)
-    for tongueTypeIdx = 1:numTongueTypes
-        % get tongue type of this group (no tongue / no contact tongue / tongue with spout contact
-        tongueType = tongueTypes{tongueTypeIdx};
-        % Determine size of this group based on weights
-        groupSize = round(groupSize * weights.(tongueType) * numTongueTypes);
-        % Create mask for which indices satisfy this group's criteria
-        groupMask = (spoutPos == spoutIdx) & tongueTypeMasks.(tongueType);
-        % Map mask onto actual indices for this group
-        groupIdx = overallIdx(groupMask);
-        % Choose a random subset of this group's indices
-        newChosenIdx = datasample(groupIdx, groupSize, 'Replace', false);
-        % Add on to previous group's chosen indices
-        chosenIdx = [chosenIdx, newChosenIdx];
+if enableWeighting
+    % Pick random frame numbers, balanced by frame type according to weights
+    for spoutTarget = spoutTargets
+        for tongueTypeIdx = 1:numTongueTypes
+            % get tongue type of this group (no tongue / no contact tongue / tongue with spout contact
+            tongueType = tongueTypes{tongueTypeIdx};
+            % Determine size of this group based on weights
+            groupSize = floor(equalGroupSize * weights.(tongueType) * numTongueTypes / length(spoutTargets));
+            % Create mask for which indices satisfy this group's criteria
+            groupMask = (spoutPos == spoutTarget) & tongueTypeMasks.(tongueType);
+            % Map mask onto actual indices for this group
+            groupIdx = overallIdx(groupMask);
+            % Make sure we aren't trying to draw more samples than frames
+            % for this type
+            if length(groupIdx) < groupSize
+                groupSize = length(groupIdx);
+            end
+            % Choose a random subset of this group's indices
+            newChosenIdx = datasample(groupIdx, groupSize, 'Replace', false);
+            % Add on to previous group's chosen indices
+            chosenIdx = [chosenIdx, newChosenIdx];
+        end
     end
+    % Due to rounding errors, we don't get quite the number of annotations we
+    % want. Just randomly choose the rest.
+    numAnnotationsRemaining = numAnnotations - length(chosenIdx);
+    remainingChosenIdx = datasample(setdiff(overallIdx, chosenIdx), numAnnotationsRemaining, 'Replace', false);
+    fprintf('Adding %d extra random samples to counteract rounding errors.\n', length(remainingChosenIdx));
+    chosenIdx = [chosenIdx, remainingChosenIdx];
+else
+    % Pick random frame numbers (without weighting)
+    chosenIdx = datasample(overallIdx, numAnnotations, 'Replace', false);
 end
 fprintf('...done choosing random frames.\n');
-% Due to rounding errors, we don't get quite the number of annotations we
-% want. Just randomly choose the rest.
-numAnnotationsRemaining = numAnnotations - length(chosenIdx);
-remainingChosenIdx = datasample(setdiff(overallIdx, chosenIdx), numAnnotationsRemaining, 'Replace', false);
-chosenIdx = [chosenIdx, remainingChosenIdx];
 
 chosenFrames = overallIdx(chosenIdx);  % Chosen frames, numbered in the overall system
 chosenVideoIdx = videoIdx(chosenIdx);  % Chosen video indexes
 chosenFrameIdx = frameIdx(chosenIdx);  % Chosen frame indices, numbered within each video
 
 
-if plotFlag
+if enableWeighting && plotFlag
     figure; hold on;
     plot(tongueTypeMasks.spoutContactTongue, 'DisplayName', 'Spout contact')
     plot(tongueTypeMasks.noSpoutContactTongue + 1.5, 'DisplayName', 'Tongue but no contact')
@@ -356,7 +417,7 @@ for k = 1:length(chosenVideoIdx)
     manualTrackingList(k).videoPath = clipPath;
     manualTrackingList(k).frameNumbers = clipCenterFrame;
     manualTrackingList(k).originalPath = videoFilePath;
-    manualTrackingList(k).origianlFrameNumber = frameNumber;
+    manualTrackingList(k).originalFrameNumber = frameNumber;
 end
 fprintf('...done creating clips.\n');
 
