@@ -1539,6 +1539,10 @@ set(handles.fileList, 'Enable', 'off');
 [proceed, handles] = warnIfLosingROIChanges(handles);
 if proceed
     [PathName, FileName] = getCurrentVideoFileSelection(handles);
+    if isempty(FileName)
+        % Something is wrong, cancel.
+        return;
+    end
     disp('Loading video...')
     disp(['Loading file: ', fullfile(PathName, FileName)])
     handles = loadVideoOrImage(handles, fullfile(PathName, FileName));
@@ -1567,16 +1571,24 @@ if nargin == 2
 else
     previous = false;
 end
-
+PathName = '';
+FileName = '';
+FileIndex = [];
 prerandomizedTrackingMode = isPrerandomizedTrackingModeOn(handles);
 if ~prerandomizedTrackingMode
     PathName = get(handles.currentDirectory, 'String');
     FileNames = get(handles.fileList, 'String');
     if previous
         FileIndex = get(handles.fileList, 'UserData');
+        if FileIndex > length(FileNames)
+            return;
+        end
         FileName = cell2mat(FileNames(FileIndex));
     else
         FileIndex = get(handles.fileList, 'Value');
+        if FileIndex > length(FileNames)
+            return;
+        end
         FileName = cell2mat(FileNames(FileIndex));
     end
 else
