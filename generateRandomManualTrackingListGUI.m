@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 06-Jan-2022 11:37:49
+% Last Modified by GUIDE v2.5 09-Feb-2022 22:05:33
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -334,9 +334,11 @@ params.saveFilepath = fullfile(params.clipDirectory, saveFilename);
 
 params.lickStructFilePaths = getLickStructFilePaths(handles);
 params.trialAlignment = getTrialAlignment(handles);
+params.enableWeighting = handles.weightedRandomizationCheckbox.Value;
 params.weights.noTongue = str2double(handles.noTongueWeight.String);
 params.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
 params.weights.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
+params.allVideosSameLength = handles.allVideosSameLength.Value;
 
 function handles = loadParams(handles, params)
 handles = setVideoRootDirectories(handles, params.videoRootDirectories);
@@ -346,6 +348,9 @@ handles.numAnnotations.String = num2str(params.numAnnotations);
 handles.clipDirectory.String = params.clipDirectory;
 handles.clipRadius.String = num2str(params.clipRadius);
 
+handles.weightedRandomizationCheckbox.Value = params.enableWeighting;
+handles = updateWeightedRandomizationState(handles, params.enableWeighting);
+
 handles = setLickStructFilePaths(handles, params.lickStructFilePaths);
 handles = setTrialAlignment(handles, params.trialAlignment);
 
@@ -353,6 +358,18 @@ handles.noTongueWeight.String = num2str(params.weights.noTongue);
 handles.spoutContactWeight.String = num2str(params.weights.spoutContactTongue);
 handles.tongueNoContactWeight.String = num2str(params.weights.noSpoutContactTongue);
 
+if ~isfield(params, 'allVideosSameLength')
+    % Legacy file type
+    params.allVideosSameLength = 1;
+end
+handles.allVideosSameLength.Value = params.allVideosSameLength;
+
+if ~isfield(params, 'enableWeighting')
+    % Legacy file type
+    params.enableWeighting = 1;
+end
+handles.weightedRandomizationCheckbox.Value = params.enableWeighting;
+handles = updateWeightedRandomizationState(handles, params.enableWeighting);
 
 % --- Executes on button press in runButton.
 function runButton_Callback(hObject, eventdata, handles)
@@ -404,7 +421,25 @@ function LickStructBrowseButton_Callback(hObject, eventdata, handles)
 % hObject    handle to LickStructBrowseButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
+[newFile, newDir] = uigetfile('*.mat', 'Locate a lick_struct to add to the list for classifying frames and weighting their random selection.');
+disp(newFile)
+disp(newDir)
+if newFile == 0
+    return
+end
+newPath = fullfile(newDir, newFile);
+currentFiles = get(handles.lickStructFilePaths, 'String');
+if isempty(currentFiles)
+    currentFiles = {};
+end
+if ischar(currentFiles)
+    currentFiles = {currentFiles};
+end
+if ~any(strcmp(currentFiles, newPath))
+    currentFiles = [currentFiles; newPath];
+    set(handles.lickStructFilePaths, 'String', currentFiles);
+    guidata(hObject, handles);
+end
 
 
 function videoAlignmentWithFPGA_Callback(hObject, eventdata, handles)
@@ -584,3 +619,37 @@ else
     disp('Cancelled - parameters not loaded.');
 end
 guidata(hObject, handles);
+
+function handles = updateWeightedRandomizationState(handles, state)
+if state
+    enableState = 'on';
+else
+    enableState = 'off';
+end
+handles.lickStructFilePaths.Enable = enableState;
+handles.LickStructBrowseButton.Enable = enableState;
+handles.alignFPGAWithVideoButton.Enable = enableState;
+handles.FPGAAlignmentWithVideo.Enable = enableState;
+handles.videoAlignmentWithFPGA.Enable = enableState;
+handles.tongueNoContactWeight.Enable = enableState;
+handles.noTongueWeight.Enable = enableState;
+handles.spoutContactWeight.Enable = enableState;
+
+% --- Executes on button press in weightedRandomizationCheckbox.
+function weightedRandomizationCheckbox_Callback(hObject, eventdata, handles)
+% hObject    handle to weightedRandomizationCheckbox (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of weightedRandomizationCheckbox
+handles = updateWeightedRandomizationState(handles, handles.weightedRandomizationCheckbox.Value);
+guidata(hObject, handles);
+
+
+% --- Executes on button press in allVideosSameLength.
+function allVideosSameLength_Callback(hObject, eventdata, handles)
+% hObject    handle to allVideosSameLength (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of allVideosSameLength
