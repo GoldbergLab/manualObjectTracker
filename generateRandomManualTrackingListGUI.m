@@ -333,7 +333,11 @@ params.clipRadius = str2double(handles.clipRadius.String);
 params.saveFilepath = fullfile(params.clipDirectory, saveFilename);
 
 params.lickStructFilePaths = getLickStructFilePaths(handles);
-params.trialAlignment = getTrialAlignment(handles);
+if handles.weightedRandomizationCheckbox.Value
+    params.trialAlignment = getTrialAlignment(handles);
+else
+    params.trialAlignment = struct();
+end
 params.enableWeighting = handles.weightedRandomizationCheckbox.Value;
 params.weights.noTongue = str2double(handles.noTongueWeight.String);
 params.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
