@@ -255,15 +255,34 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 function trialAlignment = getTrialAlignment(handles)
-if ischar(handles.videoAlignmentWithFPGA.String) && ~isvector(handles.videoAlignmentWithFPGA.String)
-    video = split2DCharArray(handles.videoAlignmentWithFPGA.String, @(row)str2double(row));
+if isempty(handles.videoAlignmentWithFPGA.String)
+    % We got nada.
+    video = [];
+    fpga = [];
 else
-    video = cellfun(@str2double, handles.videoAlignmentWithFPGA.String);
-end
-if ischar(handles.FPGAAlignmentWithVideo.String) && ~isvector(handles.FPGAAlignmentWithVideo.String)
-    fpga = split2DCharArray(handles.FPGAAlignmentWithVideo.String, @(row)str2double(row));
-else
-    fpga = cellfun(@str2double, handles.FPGAAlignmentWithVideo.String);
+    if ischar(handles.videoAlignmentWithFPGA.String)
+        % We got a char array. This is either a single alignment number, or
+        % a stupid 2D char array
+        if isvector(handles.videoAlignmentWithFPGA.String)
+            % It's a single
+            video = str2double(handles.videoAlignmentWithFPGA.String);
+        else
+            % It's a stupid 2D char array
+            video = split2DCharArray(handles.videoAlignmentWithFPGA.String, @(row)str2double(row));
+        end
+    else
+        % We got a cell array
+        video = cellfun(@str2double, handles.videoAlignmentWithFPGA.String);
+    end
+    if ischar(handles.FPGAAlignmentWithVideo.String)
+        if isvector(handles.FPGAAlignmentWithVideo.String)
+            fpga = str2double(handles.FPGAAlignmentWithVideo.String);
+        else
+            fpga = split2DCharArray(handles.FPGAAlignmentWithVideo.String, @(row)str2double(row));
+        end
+    else
+        fpga = cellfun(@str2double, handles.FPGAAlignmentWithVideo.String);
+    end
 end
 trialAlignment = struct();
 for k = 1:min([length(video), length(fpga)])
