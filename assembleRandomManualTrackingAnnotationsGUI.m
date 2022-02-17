@@ -22,7 +22,7 @@ function varargout = assembleRandomManualTrackingAnnotationsGUI(varargin)
 
 % Edit the above text to modify the response to help assembleRandomManualTrackingAnnotationsGUI
 
-% Last Modified by GUIDE v2.5 09-Jun-2020 20:25:26
+% Last Modified by GUIDE v2.5 16-Feb-2022 14:26:08
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -79,6 +79,10 @@ if length(varargin) == 1 && iscell(varargin{1})
     % Set up default field values
     set(handles.baseDirectory, 'String', baseDirectory);
     set(handles.saveFilepath, 'String', saveFilepath);
+else
+    handles.output.prerandomizedAnnotationFilepath = '';
+    handles.output.baseDirectory = '';
+    handles.output.saveFilepath = '';
 end
 
 handles.output.complete = false;
@@ -100,126 +104,6 @@ function varargout = assembleRandomManualTrackingAnnotationsGUI_OutputFcn(hObjec
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 delete(handles.figure1);
-
-% --- Executes on button press in videoRootDirectoryBrowseButton.
-function videoRootDirectoryBrowseButton_Callback(hObject, eventdata, handles)
-% hObject    handle to videoRootDirectoryBrowseButton (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-newDir = uigetdir('.', 'Choose directory in which to search for videos to select frames from.');
-if newDir == 0
-    return
-end
-currentDirs = get(handles.videoRootDirectories, 'String');
-if isempty(currentDirs)
-    currentDirs = {};
-end
-if ischar(currentDirs)
-    currentDirs = {currentDirs};
-end
-if ~any(strcmp(currentDirs, newDir))
-    currentDirs = [currentDirs; newDir];
-    set(handles.videoRootDirectories, 'String', currentDirs);
-    guidata(hObject, handles);
-end
-
-
-function videoRootDirectories_Callback(hObject, eventdata, handles)
-% hObject    handle to videoRootDirectories (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of videoRootDirectories as text
-%        str2double(get(hObject,'String')) returns contents of videoRootDirectories as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function videoRootDirectories_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to videoRootDirectories (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in pushbutton2.
-function pushbutton2_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
-
-function videoRegex_Callback(hObject, eventdata, handles)
-% hObject    handle to videoRegex (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of videoRegex as text
-%        str2double(get(hObject,'String')) returns contents of videoRegex as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function videoRegex_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to videoRegex (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-
-function videoExtensions_Callback(hObject, eventdata, handles)
-% hObject    handle to videoExtensions (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of videoExtensions as text
-%        str2double(get(hObject,'String')) returns contents of videoExtensions as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function videoExtensions_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to videoExtensions (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-
-function numAnnotations_Callback(hObject, eventdata, handles)
-% hObject    handle to numAnnotations (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of numAnnotations as text
-%        str2double(get(hObject,'String')) returns contents of numAnnotations as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function numAnnotations_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to numAnnotations (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
 function baseDirectory_Callback(hObject, eventdata, handles)
 % hObject    handle to baseDirectory (see GCBO)
@@ -249,33 +133,33 @@ function baseDirectoryBrowseButton_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-newDir = uigetdir('.', 'Choose directory in which to save clip videos.');
+newDir = uigetdir('.', 'Choose directory containing the videos, the ROI folder, and the prerandomized .mat file listing.');
 if newDir == 0
     return
 end
 handles.baseDirectory.String = newDir;
 guidata(hObject, handles);
-
-function clipRadius_Callback(hObject, eventdata, handles)
-% hObject    handle to clipRadius (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of clipRadius as text
-%        str2double(get(hObject,'String')) returns contents of clipRadius as a double
-
-% --- Executes during object creation, after setting all properties.
-function clipRadius_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to clipRadius (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
+% 
+% function clipRadius_Callback(hObject, eventdata, handles)
+% % hObject    handle to clipRadius (see GCBO)
+% % eventdata  reserved - to be defined in a future version of MATLAB
+% % handles    structure with handles and user data (see GUIDATA)
+% 
+% % Hints: get(hObject,'String') returns contents of clipRadius as text
+% %        str2double(get(hObject,'String')) returns contents of clipRadius as a double
+% 
+% % --- Executes during object creation, after setting all properties.
+% function clipRadius_CreateFcn(hObject, eventdata, handles)
+% % hObject    handle to clipRadius (see GCBO)
+% % eventdata  reserved - to be defined in a future version of MATLAB
+% % handles    empty - handles not created until after all CreateFcns called
+% 
+% % Hint: edit controls usually have a white background on Windows.
+% %       See ISPC and COMPUTER.
+% if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+%     set(hObject,'BackgroundColor','white');
+% end
+% 
 
 % --- Executes on button press in runButton.
 function runButton_Callback(hObject, eventdata, handles)
@@ -284,18 +168,40 @@ function runButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 handles.output.baseDirectory = get(handles.baseDirectory, 'String');
 handles.output.saveFilepath = get(handles.saveFilepath, 'String');
+if isempty(handles.output.baseDirectory)
+    warndlg('Please enter a directory in which to look for videos, ROI files, and random annotation listings.');
+end
 if isempty(handles.output.prerandomizedAnnotationFilepath)
     % Use default filepath for prerandomized annotation list
     defaultPrerandomizedAnnotationFilename = 'randomizedAnnotationList.mat';
     handles.output.prerandomizedAnnotationFilepath = fullfile(handles.output.baseDirectory, defaultPrerandomizedAnnotationFilename);
 end
-assembleRandomManualTrackingAnnotations( ...
-    handles.output.prerandomizedAnnotationFilepath, ...
-    handles.output.baseDirectory, ...
-    handles.output.saveFilepath);
+if handles.makeTrainingFileCheckbox.Value
+    % We are making the final training file
+    [topOrigin, topSize, botOrigin, botSize, topROINum] = getMaskParameters(handles);
+    assembleRandomManualTrackingAnnotations( ...
+        handles.output.prerandomizedAnnotationFilepath, ...
+        handles.output.baseDirectory, ...
+        handles.output.saveFilepath, ...
+        topOrigin, topSize, botOrigin, botSize, topROINum);
+else
+    % We are not making the final training file
+    assembleRandomManualTrackingAnnotations( ...
+        handles.output.prerandomizedAnnotationFilepath, ...
+        handles.output.baseDirectory, ...
+        handles.output.saveFilepath);
+end
 handles.output.complete = true;
 guidata(hObject, handles);
 figure1_CloseRequestFcn(handles.figure1, eventdata, handles)
+
+function [topOrigin, topSize, botOrigin, botSize, topROINum] = getMaskParameters(handles)
+topSize = eval(handles.topMaskSize.String);
+botSize = eval(handles.botMaskSize.String);
+topOrigin = eval(handles.topMaskOrigin.String);
+botOrigin = eval(handles.botMaskOrigin.String);
+roiNums = cellstr(handles.topMaskROINum.String);
+topROINum = str2double(roiNums{handles.topMaskROINum.Value});
 
 % --- Executes when user attempts to close figure1.
 function figure1_CloseRequestFcn(hObject, eventdata, handles)
@@ -309,8 +215,6 @@ if isequal(get(hObject, 'waitstatus'), 'waiting')
 else
     delete(hObject);
 end
-
-
 
 function saveFilepath_Callback(hObject, eventdata, handles)
 % hObject    handle to saveFilepath (see GCBO)
@@ -333,7 +237,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
 % --- Executes on button press in saveFilepathBrowseButton.
 function saveFilepathBrowseButton_Callback(hObject, eventdata, handles)
 % hObject    handle to saveFilepathBrowseButton (see GCBO)
@@ -345,5 +248,210 @@ if all(file == 0) || all(path == 0)
     return;
 end
 filepath = fullfile(path, file);
-handles.saveFilename.String = filepath;
+handles.saveFilepath.String = filepath;
 guidata(hObject, handles);
+
+function substituteDriveLetter_Callback(hObject, eventdata, handles)
+% hObject    handle to substituteDriveLetter (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of substituteDriveLetter as text
+%        str2double(get(hObject,'String')) returns contents of substituteDriveLetter as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function substituteDriveLetter_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to substituteDriveLetter (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in helpButton.
+function helpButton_Callback(hObject, eventdata, handles)
+% hObject    handle to helpButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+function helpdialog(handles)
+% Adapted from https://www.mathworks.com/help/matlab/ref/dialog.html
+d = dialog('Position',[10 100 650 650],'Name','Manual Object Tracker help');
+helpText = {
+    ['manualObjectTracker version ', handles.version], ...
+    '', ...
+    'assembleRandomManualTrackingAnnotationsGUI is designed to take a set ', ...
+    'of prerandomized, annotated videos, and assemble them into a single ', ...
+    '.mat file containing images and masks, so they can be used to train', ...
+    'a neural network to segment images.', ...
+    '', ...
+    'Directory to search for annotated videos:', ...
+    '    The directory in which the prerandomized video clips are located, ', ...
+    '    as well as the ROIs subfolder containing the annotations, and the ', ...
+    '    prerandomized annotation listing .mat file', ...
+    '', ...
+    'Save filename for training data', ...
+    '    Path at which the training data .mat file should be stored. This file', ...
+    '    will contain the imageStack and maskStack attributes, which are each', ...
+    '    3D arrays.', ...
+    '', ...
+    '  Written by Brian Kardon bmk27@cornell.edu 2018'...
+    '', ...
+    '', ...
+    };
+txt = uicontrol('Parent',d,...
+           'Style','text',...
+           'Position',[20 -60 600 700],...
+           'FontSize', 10,...
+           'HorizontalAlignment', 'left',...
+           'String',helpText,...
+           'FontName','Courier');
+
+btn = uicontrol('Parent',d,...
+           'Position',[90 0 470 25],...
+           'String','Close',...
+           'Callback','delete(gcf)');
+
+function handles = updateTrainingFileState(handles)
+% Toggle whether or not the training file creation widgets are greyed out
+% or not depending on the state of the 'make training file' checkbox.
+if handles.makeTrainingFileCheckbox.Value
+    enableState = 'on';
+else
+    enableState = 'off';
+end
+
+handles.topMaskOrigin.Enable = enableState;
+handles.botMaskOrigin.Enable = enableState;
+handles.topMaskSize.Enable = enableState;
+handles.botMaskSize.Enable = enableState;
+handles.topMaskROINum.Enable = enableState;
+
+% --- Executes on button press in makeTrainingFileCheckbox.
+function makeTrainingFileCheckbox_Callback(hObject, eventdata, handles)
+% hObject    handle to makeTrainingFileCheckbox (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of makeTrainingFileCheckbox
+handles = updateTrainingFileState(handles);
+guidata(hObject, handles);
+
+
+function topMaskOrigin_Callback(hObject, eventdata, handles)
+% hObject    handle to topMaskOrigin (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of topMaskOrigin as text
+%        str2double(get(hObject,'String')) returns contents of topMaskOrigin as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function topMaskOrigin_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to topMaskOrigin (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function botMaskOrigin_Callback(hObject, eventdata, handles)
+% hObject    handle to botMaskOrigin (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of botMaskOrigin as text
+%        str2double(get(hObject,'String')) returns contents of botMaskOrigin as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function botMaskOrigin_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to botMaskOrigin (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function topMaskSize_Callback(hObject, eventdata, handles)
+% hObject    handle to topMaskSize (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of topMaskSize as text
+%        str2double(get(hObject,'String')) returns contents of topMaskSize as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function topMaskSize_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to topMaskSize (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function botMaskSize_Callback(hObject, eventdata, handles)
+% hObject    handle to botMaskSize (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of botMaskSize as text
+%        str2double(get(hObject,'String')) returns contents of botMaskSize as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function botMaskSize_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to botMaskSize (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on selection change in topMaskROINum.
+function topMaskROINum_Callback(hObject, eventdata, handles)
+% hObject    handle to topMaskROINum (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns topMaskROINum contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from topMaskROINum
+
+
+% --- Executes during object creation, after setting all properties.
+function topMaskROINum_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to topMaskROINum (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

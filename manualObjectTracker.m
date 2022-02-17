@@ -2044,7 +2044,7 @@ function helpButton_Callback(hObject, eventdata, handles)
 % hObject    handle to helpButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-helpdialog(handles)
+helpdialog(handles);
 
 % --- Executes on button press in prerandomizedTrackingModeButton.
 function prerandomizedTrackingModeButton_Callback(hObject, ~, handles)
@@ -2351,6 +2351,7 @@ filteredListOfStrings = listOfStrings(filteredIndices);
 
 function helpdialog(handles)
     % Adapted from https://www.mathworks.com/help/matlab/ref/dialog.html
+    warndlg('hi')
     d = dialog('Position',[10 100 650 650],'Name','Manual Object Tracker help');
     helpText = {
         ['manualObjectTracker version ', handles.version], ...

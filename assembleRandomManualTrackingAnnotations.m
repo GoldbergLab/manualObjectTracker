@@ -1,4 +1,4 @@
-function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath, baseDirectory, saveFilepath)
+function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath, baseDirectory, saveFilepath, topOrigin, topSize, botOrigin, botSize, topROINum)
 % Takes a file containing video names and a corresponding random selection 
 %   of frame numbers to annotate, and generates a video file composed of
 %   the randomly selected frames, as well as an ROI .mat file composed of
@@ -10,8 +10,27 @@ function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath
 % saveFilepath:                     File path to use to save collected randomized
 %                                       frames and ROI annotations. An
 %                                       extension is not required.
+% topOrigin:                        1x2 array of xy coordinates specifying
+%                                   the location of the top left corner of 
+%                                   the top mask in video coordinates.
+% topSize:                          1x2 array representing the size of the
+%                                   top mask in pixels
+% botOrigin:                        1x2 array of xy coordinates specifying
+%                                   the location of the top left corner of 
+%                                   the bottom mask in video coordinates.
+% botSize:                          1x2 array representing the size of the
+%                                   bottom mask in pixels
+% topROINum:                        Either 1 or 2 - which ROI number
+%                                   represents the top mask.
 %
 % Written by Brian Kardon bmk27@cornell.edu 2018
+
+if ~exist('topOrigin', 'var') || ~exist('topSize', 'var') || ~exist('botOrigin', 'var') || ~exist('botSize', 'var') || ~exist('topROINum', 'var')
+    makeTrainingFile = false;
+    fprintf('Mask information not provided - not creating final training file.\n');
+else
+    makeTrainingFile = true;
+end
 
 [saveFiledir, ~, ~] = fileparts(saveFilepath);
 if ~exist(saveFiledir, 'dir')
@@ -23,10 +42,22 @@ end
 s = load(prerandomizedAnnotationFilepath);
 manualTrackingList = s.manualTrackingList;
 
+% DEBUG
+manualTrackingList = manualTrackingList(1:100);
+
 % Retrieve information about the video files
 numVideos = length(manualTrackingList);
 numFrames = sum(cellfun(@length, {manualTrackingList.frameNumbers}));
-videoDataSize = loadVideoDataSize(fullfile(manualTrackingList(1).videoPath, manualTrackingList(1).videoFilename));
+
+% In case videos are on a network drive and were annotated while the
+% network drive was mounted under a different letter, swap out the drive
+% letter for the one specified as the base directory:
+actualDrive = getDrive(baseDirectory);
+%recordedDrive = getDrive(manualTrackingList(1).videoPath);
+sampleVideoPath = fullfile(manualTrackingList(1).videoPath, manualTrackingList(1).videoFilename);
+sampleVideoPath = switchDrive(sampleVideoPath, actualDrive, false);
+
+videoDataSize = loadVideoDataSize(sampleVideoPath);
 numROIs = 2;
 
 % Initialize output data struct
@@ -47,6 +78,7 @@ for k = 1:numVideos
     frameNumbers = manualTrackingList(k).frameNumbers;
     videoFilename = manualTrackingList(k).videoFilename;
     videoFilepath = fullfile(manualTrackingList(k).videoPath, manualTrackingList(k).videoFilename);
+    videoFilepath = switchDrive(videoFilepath, actualDrive, false);
 
     % Load video from current video filename
     videoData = loadVideoData(videoFilepath);
@@ -100,12 +132,20 @@ end
 
 % Strip extension from saveFilename
 [savePath, saveName, ~] = fileparts(saveFilepath);
-saveFilepath = fullfile(savePath, saveName);
+saveFilepathBase = fullfile(savePath, saveName);
 
 % Save selected video
-saveVideoData(selectedVideoData, [saveFilepath, '.avi']);
+assembledVideoPath = [saveFilepathBase, '.avi'];
+saveVideoData(selectedVideoData, assembledVideoPath);
 % Save selected ROI annotations
-save([saveFilepath, '.mat'], 'outputStruct');
+assembledROIPath = [saveFilepathBase, '_ROI.mat'];
+save(assembledROIPath, 'outputStruct');
+
+if makeTrainingFile
+    % Save final training .mat file
+    assembledTrainingPath = [saveFilepathBase, '_training.mat'];
+    createSegmentationTrainingSet(assembledVideoPath, assembledROIPath, assembledTrainingPath, topOrigin, topSize, botOrigin, botSize, topROINum)
+end
 
 function ROIregexp = translateVideoNameToROIRegexp(videoFilename)
 [~, vname, ~] = fileparts(videoFilename);
