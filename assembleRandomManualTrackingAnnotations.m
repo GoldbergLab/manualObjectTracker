@@ -43,7 +43,7 @@ s = load(prerandomizedAnnotationFilepath);
 manualTrackingList = s.manualTrackingList;
 
 % DEBUG
-manualTrackingList = manualTrackingList(1:100);
+% manualTrackingList = manualTrackingList(1:100);
 
 % Retrieve information about the video files
 numVideos = length(manualTrackingList);
