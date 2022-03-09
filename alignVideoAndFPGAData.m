@@ -1,4 +1,6 @@
-function startingTrialNums = alignVideoAndFPGAData(videoRootDirectories, lickStructFiles)
+function startingTrialNums = alignVideoAndFPGAData(videoRootDirectories, dataFiles)
+% dataFiles should be a cell array of either lick_struct files or t_stats
+% files
 
 f = figure('Units', 'normalized', 'Position', [0.1, 0, 0.8, 0.85]);
 % Overwrite function close callback to prevent user from
@@ -18,7 +20,7 @@ acceptButton = uicontrol(f, 'Position',[10 10 200 20],'String','Accept trial ali
 % smaller the number, the faster the interface can be prepared.
 maxDiffs = 50;
 
-[tdiffs.FPGA, tdiffs.Video] = get_tdiff_video(videoRootDirectories, lickStructFiles, maxDiffs);
+[tdiffs.FPGA, tdiffs.Video] = get_tdiff_video(videoRootDirectories, dataFiles, maxDiffs);
 
 sgtitle({'For each session, select the earliest starting trial interval',...
          'for FPGA and Video trials so they line up with each other.',...
@@ -96,7 +98,7 @@ function customCloseReqFcn(src, callbackdata)
             return;
     end
 
-function [tdiff_fpga, tdiff_video] = get_tdiff_video(videoRootDirectories, lickStructFiles, maxDiffs)
+function [tdiff_fpga, tdiff_video] = get_tdiff_video(videoRootDirectories, dataFiles, maxDiffs)
 % maxDiffs is normally Inf. If an integer, then it limits the # of diffs
 % returned. This is for performance, as it can take a long time to
 % graphically represent thousands of diffs, and is unnecessary, as the
@@ -122,12 +124,22 @@ for sessionNum=1:numel(videoRootDirectories)
     fprintf('\t# diffs: %d\n', length(tdiff_video{sessionNum}));
 end
 
-for sessionNum=1:numel(lickStructFiles)
-    fprintf('Gathering FPGA trial times for session #%d of %d...\n', sessionNum, numel(lickStructFiles));
-    load(lickStructFiles{sessionNum}, 'lick_struct');
+for sessionNum=1:numel(dataFiles)
+    fprintf('Gathering FPGA trial times for session #%d of %d...\n', sessionNum, numel(dataFiles));
+    s = load(dataFiles{sessionNum}, 'lick_struct', 'l_sp_struct');
+    if isfield(s, 'lick_struct')
+        % This must be a lick_struct file.
+        lick_struct = s.lick_struct;
+    elseif isfield(s, 'l_sp_struct')
+        % Data file must be a t_stats file - in that file, the lick struct
+        % is stored under a different name.
+        lick_struct = s.l_sp_struct;
+    else
+        error('Data file should either be a lick_struct file, or a t_stats file with the lick_struct stored under the field name l_sp_struct.');
+    end
     numDiffs = min([length(lick_struct), maxDiffs]);
     tdiff_fpga{sessionNum} = diff([lick_struct(1:numDiffs).real_time]);
-    fprintf('\tRoot: %s\n', lickStructFiles{sessionNum});
+    fprintf('\tRoot: %s\n', dataFiles{sessionNum});
     fprintf('\t# diffs: %d\n', length(tdiff_fpga{sessionNum}));
 end
 

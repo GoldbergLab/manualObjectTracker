@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 09-Feb-2022 22:05:33
+% Last Modified by GUIDE v2.5 02-Mar-2022 14:28:11
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -291,6 +291,9 @@ for k = 1:min([length(video), length(fpga)])
 end
 
 function handles = setTrialAlignment(handles, trialAlignment)
+if isempty(trialAlignment) || isempty(fieldnames(trialAlignment))
+    return
+end
 videoStartingFrames = {};
 fpgaStartingFrames = {};
 for k = 1:length(trialAlignment)
@@ -300,15 +303,15 @@ end
 handles.videoAlignmentWithFPGA.String = videoStartingFrames;
 handles.FPGAAlignmentWithVideo.String = fpgaStartingFrames;
 
-function lickStructFilePaths = getLickStructFilePaths(handles)
-if ischar(handles.lickStructFilePaths.String) && ~isvector(handles.lickStructFilePaths.String)
-    lickStructFilePaths = split2DCharArray(handles.lickStructFilePaths.String);
+function weightingFilePaths = getWeightingFilePaths(handles)
+if ischar(handles.weightingFilePaths.String) && ~isvector(handles.weightingFilePaths.String)
+    weightingFilePaths = split2DCharArray(handles.weightingFilePaths.String);
 else
-    lickStructFilePaths = handles.lickStructFilePaths.String;
+    weightingFilePaths = handles.weightingFilePaths.String;
 end
 
-function handles = setLickStructFilePaths(handles, lickStructFilePaths)
-handles.lickStructFilePaths.String = lickStructFilePaths;
+function handles = setWeightingFilePaths(handles, weightingFilePaths)
+handles.weightingFilePaths.String = weightingFilePaths;
 
 function videoRootDirectories = getVideoRootDirectories(handles)
 if ischar(handles.videoRootDirectories.String) && ~isvector(handles.videoRootDirectories.String)
@@ -351,7 +354,7 @@ params.clipDirectory = handles.clipDirectory.String;
 params.clipRadius = str2double(handles.clipRadius.String);
 params.saveFilepath = fullfile(params.clipDirectory, saveFilename);
 
-params.lickStructFilePaths = getLickStructFilePaths(handles);
+params.weightingFilePaths = getWeightingFilePaths(handles);
 if handles.weightedRandomizationCheckbox.Value
     params.trialAlignment = getTrialAlignment(handles);
 else
@@ -361,6 +364,7 @@ params.enableWeighting = handles.weightedRandomizationCheckbox.Value;
 params.weights.noTongue = str2double(handles.noTongueWeight.String);
 params.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
 params.weights.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
+params.weights.smallTongue = str2double(handles.smallTongueWeight.String);
 params.allVideosSameLength = handles.allVideosSameLength.Value;
 
 function handles = loadParams(handles, params)
@@ -374,12 +378,13 @@ handles.clipRadius.String = num2str(params.clipRadius);
 handles.weightedRandomizationCheckbox.Value = params.enableWeighting;
 handles = updateWeightedRandomizationState(handles, params.enableWeighting);
 
-handles = setLickStructFilePaths(handles, params.lickStructFilePaths);
+handles = setWeightingFilePaths(handles, params.weightingFilePaths);
 handles = setTrialAlignment(handles, params.trialAlignment);
 
 handles.noTongueWeight.String = num2str(params.weights.noTongue);
 handles.spoutContactWeight.String = num2str(params.weights.spoutContactTongue);
 handles.tongueNoContactWeight.String = num2str(params.weights.noSpoutContactTongue);
+handles.smallTongueWeight.String = num2str(params.weights.smallTongue);
 
 if ~isfield(params, 'allVideosSameLength')
     % Legacy file type
@@ -417,18 +422,18 @@ else
     delete(hObject);
 end
 
-function lickStructFilePaths_Callback(hObject, eventdata, handles)
-% hObject    handle to lickStructFilePaths (see GCBO)
+function weightingFilePaths_Callback(hObject, eventdata, handles)
+% hObject    handle to weightingFilePaths (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of lickStructFilePaths as text
-%        str2double(get(hObject,'String')) returns contents of lickStructFilePaths as a double
+% Hints: get(hObject,'String') returns contents of weightingFilePaths as text
+%        str2double(get(hObject,'String')) returns contents of weightingFilePaths as a double
 
 
 % --- Executes during object creation, after setting all properties.
-function lickStructFilePaths_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to lickStructFilePaths (see GCBO)
+function weightingFilePaths_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to weightingFilePaths (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -439,19 +444,19 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
-% --- Executes on button press in LickStructBrowseButton.
-function LickStructBrowseButton_Callback(hObject, eventdata, handles)
-% hObject    handle to LickStructBrowseButton (see GCBO)
+% --- Executes on button press in WeightingFileBrowseButton.
+function WeightingFileBrowseButton_Callback(hObject, eventdata, handles)
+% hObject    handle to WeightingFileBrowseButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-[newFile, newDir] = uigetfile('*.mat', 'Locate a lick_struct to add to the list for classifying frames and weighting their random selection.');
+[newFile, newDir] = uigetfile('*.mat', ['Locate a data file (lick_struct or t_stats) to add to the list for classifying frames and weighting their random selection.']);
 disp(newFile)
 disp(newDir)
 if newFile == 0
     return
 end
 newPath = fullfile(newDir, newFile);
-currentFiles = get(handles.lickStructFilePaths, 'String');
+currentFiles = get(handles.weightingFilePaths, 'String');
 if isempty(currentFiles)
     currentFiles = {};
 end
@@ -460,7 +465,7 @@ if ischar(currentFiles)
 end
 if ~any(strcmp(currentFiles, newPath))
     currentFiles = [currentFiles; newPath];
-    set(handles.lickStructFilePaths, 'String', currentFiles);
+    set(handles.weightingFilePaths, 'String', currentFiles);
     guidata(hObject, handles);
 end
 
@@ -494,7 +499,7 @@ function alignFPGAWithVideoButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 videoRootDirectories = getVideoRootDirectories(handles);
-FPGARootDirectories = getLickStructFilePaths(handles);
+FPGARootDirectories = getWeightingFilePaths(handles);
 
 alignment = alignVideoAndFPGAData(videoRootDirectories, FPGARootDirectories);
 % Gotta change field names for legacy reasons.
@@ -634,7 +639,7 @@ function loadButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 [name, path] = uigetfile();
-if ~isempty(name) || name == 0
+if ~isempty(name) & name ~= 0
     filepath = fullfile(path, name);
     S = load(filepath);
     handles = loadParams(handles, S.params);
@@ -649,12 +654,13 @@ if state
 else
     enableState = 'off';
 end
-handles.lickStructFilePaths.Enable = enableState;
-handles.LickStructBrowseButton.Enable = enableState;
+handles.weightingFilePaths.Enable = enableState;
+handles.WeightingFileBrowseButton.Enable = enableState;
 handles.alignFPGAWithVideoButton.Enable = enableState;
 handles.FPGAAlignmentWithVideo.Enable = enableState;
 handles.videoAlignmentWithFPGA.Enable = enableState;
 handles.tongueNoContactWeight.Enable = enableState;
+handles.smallTongueWeight.Enable = enableState;
 handles.noTongueWeight.Enable = enableState;
 handles.spoutContactWeight.Enable = enableState;
 
@@ -676,3 +682,50 @@ function allVideosSameLength_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of allVideosSameLength
+
+function smallTongueWeight_Callback(hObject, eventdata, handles)
+% hObject    handle to smallTongueWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of smallTongueWeight as text
+%        str2double(get(hObject,'String')) returns contents of smallTongueWeight as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function smallTongueWeight_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to smallTongueWeight (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in videoPathSwapButton.
+function videoPathSwapButton_Callback(hObject, eventdata, handles)
+% hObject    handle to videoPathSwapButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+handles = guidata(hObject);
+newVideoRootDirectories = PathSwap(handles.videoRootDirectories.String);
+if iscell(newVideoRootDirectories)
+    handles.videoRootDirectories.String = newVideoRootDirectories;
+end
+guidata(hObject, handles);
+
+% --- Executes on button press in dataPathSwapButton.
+function dataPathSwapButton_Callback(hObject, eventdata, handles)
+% hObject    handle to dataPathSwapButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+handles = guidata(hObject);
+newWeightingFilePaths = PathSwap(handles.weightingFilePaths.String);
+if iscell(newWeightingFilePaths)
+    handles.weightingFilePaths.String = newWeightingFilePaths;
+end
+guidata(hObject, handles);
