@@ -502,13 +502,16 @@ videoRootDirectories = getVideoRootDirectories(handles);
 FPGARootDirectories = getWeightingFilePaths(handles);
 
 alignment = alignVideoAndFPGAData(videoRootDirectories, FPGARootDirectories);
-% Gotta change field names for legacy reasons.
-for k = 1:length(alignment)
-    startingTrialNums(k).fpgaStartingFrame = alignment(k).FPGA;
-    startingTrialNums(k).videoStartingFrame = alignment(k).Video;
-end
 
-handles = setTrialAlignment(handles, startingTrialNums);
+if ~isempty(alignment)
+    % Gotta change field names for legacy reasons.
+    for k = 1:length(alignment)
+        startingTrialNums(k).fpgaStartingFrame = alignment(k).FPGA;
+        startingTrialNums(k).videoStartingFrame = alignment(k).Video;
+    end
+
+    handles = setTrialAlignment(handles, startingTrialNums);
+end
 
 guidata(hObject, handles);
 
