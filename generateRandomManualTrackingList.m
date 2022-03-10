@@ -82,7 +82,7 @@ disp('Finding matching files with correct extension...');
 videoFilePaths = cellfun(@(videoBaseDirectory)findFilesByExtension(videoBaseDirectory, extensions, false), videoBaseDirectories, 'UniformOutput', false);
 tStatsPresent = false;
 if enableWeighting
-    dataStructs = cellfun(@(dataFilePath)load(dataFilePath), dataFilePaths, 'UniformOutput', true);
+    dataStructs = loadDataStructs(dataFilePaths);
     if isfield(dataStructs, 'lick_struct')
         % These must be lick_struct files.
         lickStructs = dataStructs;
@@ -537,4 +537,13 @@ for k = 1:length(allowedLickStructFields)
         valid = false;
         break;
     end
+end
+
+function dataStructs = loadDataStructs(dataFilePaths)
+dataStructs = [];
+for sessionNum = 1:length(dataFilePaths)
+    s = load(dataFilePaths{sessionNum});
+    dataStructs(sessionNum).t_stats = s.t_stats;
+    dataStructs(sessionNum).l_sp_struct = s.l_sp_struct;
+    dataStructs(sessionNum).vid_index = s.vid_index;
 end
