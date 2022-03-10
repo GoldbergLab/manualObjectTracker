@@ -324,6 +324,11 @@ for videoNum = 1:length(videoFilePaths)
             pairs = lick_struct(videoNum).pairs;
             for lickNum = 1:length(pairs)
                 pair = pairs{lickNum};
+                if isnan(pair)
+                    % Occasionally an onset/offset lick comes up as NaN -
+                    % not sure why.
+                    continue;
+                end
                 protrusionOnset = pair(1);
                 retractionOffset = pair(2);
                 smallTongueProtruding = ((idx - protrusionOnset  + periProtrusionOnsetFrameMargin(1))  >= 0) & ((idx - protrusionOnset  - periProtrusionOnsetFrameMargin(2))  <= 0);
