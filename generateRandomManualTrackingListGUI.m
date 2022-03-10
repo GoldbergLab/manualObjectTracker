@@ -309,6 +309,7 @@ if ischar(handles.weightingFilePaths.String) && ~isvector(handles.weightingFileP
 else
     weightingFilePaths = handles.weightingFilePaths.String;
 end
+weightingFilePaths = strtrim(weightingFilePaths);
 
 function handles = setWeightingFilePaths(handles, weightingFilePaths)
 handles.weightingFilePaths.String = weightingFilePaths;
@@ -321,6 +322,7 @@ else
     % MATLAB is giving it to us as a cell array
     videoRootDirectories = handles.videoRootDirectories.String;
 end
+videoRootDirectories = strtrim(videoRootDirectories);
 
 function handles = setVideoRootDirectories(handles, videoRootDirectories)
 handles.videoRootDirectories.String = videoRootDirectories;
