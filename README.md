@@ -7,10 +7,11 @@ manualObjectTracker was developed with and for MATLAB R2017a. It has been tested
 ## Installation
 
 1. Download all files or clone the repo
-2. Add the files to your MATLAB path.
-3. Open MATLAB
-4. In the command window, type ```manualObjectTracker```
-5. Off you go.
+2. Download or clone the [MATLAB-utils](https://github.com/GoldbergLab/MATLAB-utils)
+3. Add both this repo and MATLAB-utils to your MATLAB path.
+4. Open MATLAB
+5. In the command window, type ```manualObjectTracker```
+6. Off you go.
 
 ## Using generateRandomManualTrackingListGUI
 
