@@ -361,8 +361,13 @@ handles = updateDisplay(handles);
 
 function handles = loadVideoOrImage(handles, file)
 % Load a video or image from file, and reset all variables relating to the video and ROI data
-disp('loadVideoOrImage');
 if ischar(file)
+    % Set boolean flag indicating that masks are NOT bunded together
+    % with images, so we DO need to look for separate mask files. This will
+    % be changed if it turns out we're loading bundled mask/video files
+    % (.mat files)
+    handles.bundledMasks = false;
+    
     disp(file)
     [~, filename, ~] = fileparts(file);
     if strcmp(filename, handles.nullFile)
@@ -374,6 +379,7 @@ if ischar(file)
     if ~proceed
         return
     end
+    [fileDir, fileName, fileExt] = fileparts(file);
     try
         % Check if this is an image file rather than a video file.
         imfinfo(file);
@@ -394,7 +400,37 @@ if ischar(file)
         end
         handles.videoData = zeros([size(imageData), 1]);
         handles.videoData(:, :, 1) = imageData;
+    elseif strcmpi(fileExt, '.mat')
+        % This may be a set of assembled random annotations, containing an
+        % image stack and a corresponding mask stack
+        data = load(file);
+        % Field names have changed over the years, but I think the masks
+        % stack has consistently had the word "mask" in it.
+        fieldNames = fieldnames(data);
+        maskMask = cellfun(@(f)~isempty(regexp(lower(f), 'mask', 'once')), fieldNames, 'UniformOutput', true);
+        imageMask = cellfun(@(f)~isempty(regexp(lower(f), 'image', 'once')), fieldNames, 'UniformOutput', true);
+        if sum(maskMask) == 1
+            % Exactly one of the fields has the word "mask" in it
+            maskField = fieldNames{maskMask};
+            if sum(imageMask) > 0
+                % If at least one of the fields has the word "image" in it,
+                % pick the first of those fields as the image field
+                imageField = fieldNames{find(imageMask, 1)};
+            else
+                % Ok just pick the first non-mask-field as the image field
+                imageField = fieldNames{find(~maskMask, 1)};
+            end
+            handles.videoData = permute(squeeze(data.(imageField)), [2, 3, 1]);
+            handles.maskData = permute(squeeze(data.(maskField)), [2, 3, 1]);
+            % Set boolean flag indicating that masks are bunded together
+            % with images, so we don't need to look for separate mask
+            % files.
+            handles.bundledMasks = true;
+        else
+            error('Error when attempting to load mask/image stacks from .mat file; did not find the expected fields.');
+        end
     else
+        % Must be a video file - load it
         handles.videoData = squeeze(loadVideoData(file));
     end
 else
@@ -457,7 +493,7 @@ if get(handles.autoLoadROIs, 'Value') && ischar(file)
 end
 
 % If mask dir is set, load corresponding mask stack
-if handles.showMasks
+if handles.showMasks && ~handles.bundledMasks
     if isempty(handles.maskDir)
         handles = getMaskDirFromUser(handles);
     end
@@ -1626,7 +1662,8 @@ else
     jpgFiles = dir(fullfile(folder, '*.jpg'));
     pngFiles = dir(fullfile(folder, '*.png'));
     gifFiles = dir(fullfile(folder, '*.gif'));
-    videoFiles = cat(1, movFiles, mp4Files, aviFiles, gifFiles, jpgFiles, pngFiles);
+    matFiles = dir(fullfile(folder, '*.mat'));
+    videoFiles = cat(1, movFiles, mp4Files, aviFiles, gifFiles, jpgFiles, pngFiles, matFiles);
     videoFilenames = {videoFiles.name};
 end
 handles = setFileList(handles, videoFilenames);
@@ -2351,7 +2388,6 @@ filteredListOfStrings = listOfStrings(filteredIndices);
 
 function helpdialog(handles)
     % Adapted from https://www.mathworks.com/help/matlab/ref/dialog.html
-    warndlg('hi')
     d = dialog('Position',[10 100 650 650],'Name','Manual Object Tracker help');
     helpText = {
         ['manualObjectTracker version ', handles.version], ...
@@ -2763,6 +2799,15 @@ guidata(hObject, handles)
 function handles = loadCurrentMaskStack(handles)
 % Load and assemble the stack of mask overlays for each video frame
 
+if handles.bundledMasks
+    % Masks are bundled with images in .mat files. No need to load
+    % anything, it's already loaded.
+    return
+end
+
+% Clear masks in case we get an error or something I guess?
+handles.maskData = [];
+
 % Obtain the list of masks available in the current mask directory
 [topMaskList, botMaskList] = getMaskLists(handles);
 % Get the index of the currently loaded video file, assuming the masks are
@@ -2848,7 +2893,6 @@ end
 handles.maskDir = maskDir;
 
 function handles = loadMasks(handles)
-handles.maskData = [];
 handles = loadCurrentMaskStack(handles);
 
 function handles = unloadMasks(handles)
@@ -2861,7 +2905,9 @@ function loadMasks_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-[handles, newMaskDir] = getMaskDirFromUser(handles);
+if ~handles.bundledMasks
+    [handles, newMaskDir] = getMaskDirFromUser(handles);
+end
 if newMaskDir == 0
     % User cancelled
     return;
@@ -2877,7 +2923,7 @@ function handles = setShowMasks(handles, newShowMasks)
 oldShowMasks = handles.showMasks;
 handles.showMasksCheckbox.Value = newShowMasks;
 
-if ~oldShowMasks && newShowMasks
+if ~oldShowMasks && newShowMasks && ~handles.bundledMasks
     % Show masks was not checked, but now it is
     % If mask stack is empty, load masks 
     if isempty(handles.maskDir)
