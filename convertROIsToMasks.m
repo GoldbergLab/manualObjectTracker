@@ -93,8 +93,8 @@ origins = {};
 origins{topROINum} = topOrigin;
 origins{botROINum} = botOrigin;
 masks = {};
-masks{topROINum} = zeros(nFrames, topSize(1), topSize(2), 'logical');
-masks{botROINum} = zeros(nFrames, botSize(1), botSize(2), 'logical');
+masks{topROINum} = zeros(nFrames, topSize(2), topSize(1), 'logical');
+masks{botROINum} = zeros(nFrames, botSize(2), botSize(1), 'logical');
 
 % Loop over each frame
 for frameNum = 1:nFrames
@@ -103,15 +103,16 @@ for frameNum = 1:nFrames
         % Get origin-shifted ROI coordinates
         xROI = xROIs{roiNum, frameNum} - origins{roiNum}(1);
         yROI = yROIs{roiNum, frameNum} - origins{roiNum}(2);
-        % Create binary mask from ROI coordinates, add to stack.
-        masks{roiNum}(frameNum, :, :) = poly2mask(xROI, yROI, sizes{roiNum}(1), sizes{roiNum}(2));
+        % Create binary mask from ROI coordinates, add to stack. 
+        % Note: Yes, the order of arguments for poly2mask is:
+        %   x, y, height, width
+        %   (╯°□°)╯︵ ┻━┻
+        masks{roiNum}(frameNum, :, :) = poly2mask(xROI, yROI, sizes{roiNum}(2), sizes{roiNum}(1));
     end
 end
 % Prepare output variables
-% Also permute the arrays so we will follow the stupid row, column 
-%   convention that makes images coordinates referenced as (y, x)
-botMasks = permute(masks{botROINum}, [1, 3, 2]);
-topMasks = permute(masks{topROINum}, [1, 3, 2]);
+botMasks = masks{botROINum};
+topMasks = masks{topROINum};
 
 % If outputFilepath has been provided, save output to file
 if ~isempty(outputFilePath)

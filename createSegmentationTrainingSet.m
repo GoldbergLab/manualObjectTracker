@@ -37,8 +37,8 @@ function createSegmentationTrainingSet(pathToVideo, pathToROIs, outputPath, topO
 %   The output struct has the following structure:
 %   
 %   trainingSet
-%       maskStack = H x W x N logical
-%       imageStack = H x W x N double
+%       maskStack = N x H x W logical
+%       imageStack = N x H x W uint8
 %
 % See also: convertROIsToMasks, splitVideoIntoTopAndBottom, 
 %           manualObjectTracker
