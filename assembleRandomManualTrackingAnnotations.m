@@ -33,7 +33,7 @@ else
 end
 
 [saveFiledir, ~, ~] = fileparts(saveFilepath);
-if ~exist(saveFiledir, 'dir')
+if ~exist(saveFiledir, 'dir') && ~isempty(saveFiledir)
     disp(['Creating save file directory: ', saveFiledir])
     mkdir(saveFiledir);
 end

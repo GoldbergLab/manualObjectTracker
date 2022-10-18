@@ -110,8 +110,8 @@ end
 % Prepare output variables
 % Also permute the arrays so we will follow the stupid row, column 
 %   convention that makes images coordinates referenced as (y, x)
-botMasks = permute(masks{botROINum}, [1, 2, 3]);
-topMasks = permute(masks{topROINum}, [1, 2, 3]);
+botMasks = permute(masks{botROINum}, [1, 3, 2]);
+topMasks = permute(masks{topROINum}, [1, 3, 2]);
 
 % If outputFilepath has been provided, save output to file
 if ~isempty(outputFilePath)
