@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 02-Mar-2022 14:28:11
+% Last Modified by GUIDE v2.5 21-Oct-2022 14:34:29
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -363,11 +363,19 @@ else
     params.trialAlignment = struct();
 end
 params.enableWeighting = handles.weightedRandomizationCheckbox.Value;
-params.weights.noTongue = str2double(handles.noTongueWeight.String);
-params.weights.spoutContactTongue = str2double(handles.spoutContactWeight.String);
-params.weights.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
-params.weights.smallTongue = str2double(handles.smallTongueWeight.String);
+params.weights.tongueType.noTongue = str2double(handles.noTongueWeight.String);
+params.weights.tongueType.spoutContactTongue = str2double(handles.spoutContactWeight.String);
+params.weights.tongueType.noSpoutContactTongue = str2double(handles.tongueNoContactWeight.String);
+params.weights.tongueType.smallTongue = str2double(handles.smallTongueWeight.String);
 params.allVideosSameLength = handles.allVideosSameLength.Value;
+
+% Store spout position weights in individual named fields (to match format 
+% of tongueType weights, such as 'Position1', 'Position2', etc
+spoutPositionWeights = eval(handles.spoutPositionWeights.String);
+for spoutPositionIndex = 1:length(spoutPositionWeights)
+    spoutPosition = sprintf('Position%d', spoutPositionIndex);
+    params.weights.spoutPosition.(spoutPosition) = spoutPositionWeights(spoutPositionIndex);
+end
 
 function handles = loadParams(handles, params)
 handles = setVideoRootDirectories(handles, params.videoRootDirectories);
@@ -383,10 +391,24 @@ handles = updateWeightedRandomizationState(handles, params.enableWeighting);
 handles = setWeightingFilePaths(handles, params.weightingFilePaths);
 handles = setTrialAlignment(handles, params.trialAlignment);
 
-handles.noTongueWeight.String = num2str(params.weights.noTongue);
-handles.spoutContactWeight.String = num2str(params.weights.spoutContactTongue);
-handles.tongueNoContactWeight.String = num2str(params.weights.noSpoutContactTongue);
-handles.smallTongueWeight.String = num2str(params.weights.smallTongue);
+handles.noTongueWeight.String = num2str(params.weights.tongueType.noTongue);
+handles.spoutContactWeight.String = num2str(params.weights.tongueType.spoutContactTongue);
+handles.tongueNoContactWeight.String = num2str(params.weights.tongueType.noSpoutContactTongue);
+handles.smallTongueWeight.String = num2str(params.weights.tongueType.smallTongue);
+
+if isfield(params.weights, 'spoutPosition')
+    spoutPositions = sort(fieldnames(params.weights.spoutPosition));
+    spoutPositionWeights = zeros(1, length(spoutPositions));
+    for spoutPositionIndex = 1:length(spoutPositions)
+        spoutPosition = spoutPositions{spoutPositionIndex};
+        spoutPositionWeights(spoutPositionIndex) = params.weights.spoutPosition.(spoutPosition);
+    end
+    spw = join(arrayfun(@num2str, spoutPositionWeights, 'UniformOutput', false), ', ');
+    spw = ['[', spw{1}, ']'];
+    handles.spoutPositionWeights.String = spw;
+else
+    handles.spoutPositionWeights.String = '[1, 1, 1]';
+end
 
 if ~isfield(params, 'allVideosSameLength')
     % Legacy file type
@@ -668,6 +690,7 @@ handles.tongueNoContactWeight.Enable = enableState;
 handles.smallTongueWeight.Enable = enableState;
 handles.noTongueWeight.Enable = enableState;
 handles.spoutContactWeight.Enable = enableState;
+handles.spoutPositionWeights.Enable = enableState;
 
 % --- Executes on button press in weightedRandomizationCheckbox.
 function weightedRandomizationCheckbox_Callback(hObject, eventdata, handles)
@@ -734,3 +757,26 @@ if iscell(newWeightingFilePaths)
     handles.weightingFilePaths.String = newWeightingFilePaths;
 end
 guidata(hObject, handles);
+
+
+
+function spoutPositionWeights_Callback(hObject, eventdata, handles)
+% hObject    handle to spoutPositionWeights (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of spoutPositionWeights as text
+%        str2double(get(hObject,'String')) returns contents of spoutPositionWeights as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function spoutPositionWeights_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to spoutPositionWeights (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

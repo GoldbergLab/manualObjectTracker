@@ -73,7 +73,7 @@ end
 
 plotFlag = true;
 
-periContactTongueFrameMargin = 50;
+periContactTongueFrameMargin = 20;
 periProtrusionOnsetFrameMargin = [3, 2];   % For small tongue, how many frames before to how many frames after protrusion onset
 periRetractionOffsetFrameMargin = [2, 1];  % For small tongue, how many frames before to how many frames after retraction offset
 
@@ -105,7 +105,7 @@ end
 if ~tStatsPresent
     % smallTongue frames can only be found if t_stats file is provided.
     % lick_struct does not have the required info.
-    weights = rmfield(weights, 'smallTongue');
+    weights.tongueType = rmfield(weights.tongueType, 'smallTongue');
 end
 
 
@@ -264,29 +264,60 @@ if enableWeighting
     end
     fprintf('...done getting cue times.\n');
 
-    frameTypes = fieldnames(weights);
-    frameTypeIndices = 1:length(frameTypes);
-    % Calculate cumulative weight for each frame type
-    totalWeight = 0;
-    for frameTypeIndex = frameTypeIndices
-        frameType = frameTypes{frameTypeIndex};
-        totalWeight = totalWeight + weights.(frameType);
-    end
-    for frameTypeIndex = frameTypeIndices
-        frameType = frameTypes{frameTypeIndex};
-        weights.(frameType) = weights.(frameType) / totalWeight;
-    end
+    % Normalize weights within each weight category (tongueType,
+    % spoutPosition)
+    % 
+    % Current weight structure is:
+    %
+    % tongueType
+    %   noSpoutContactTongue
+    %   spoutContactTongue
+    %   noTongue
+    %   smallTongue
+    % spoutPosition
+    %   Position1
+    %   Position2
+    %   Position3
 
-    % Loop over videos and create corresponding lists of spout positions
-    tongueTypeMasks.spoutContactTongue = zeros(1, numFrames, 'logical');
-    tongueTypeMasks.noSpoutContactTongue = zeros(1, numFrames, 'logical');
-    tongueTypeMasks.noTongue = zeros(1, numFrames, 'logical');
-    if tStatsPresent
-        tongueTypeMasks.smallTongue = zeros(1, numFrames, 'logical');
+    weightCategories = fieldnames(weights);
+    for weightCategoryIndex = 1:length(weightCategories)
+        weightCategory = weightCategories{weightCategoryIndex};
+        subWeights = weights.(weightCategory);
+
+        frameTypes = sort(fieldnames(subWeights));
+        frameTypeIndices = 1:length(frameTypes);
+        % Calculate cumulative weight for each frame type
+        totalSubWeight = 0;
+        for frameTypeIndex = frameTypeIndices
+            frameType = frameTypes{frameTypeIndex};
+            totalSubWeight = totalSubWeight + subWeights.(frameType);
+        end
+        for frameTypeIndex = frameTypeIndices
+            frameType = frameTypes{frameTypeIndex};
+            weights.(weightCategory).(frameType) = weights.(weightCategory).(frameType) / totalSubWeight;
+        end
+    
     end
-    spoutPos = nan(1, numFrames);
 end
 
+% Loop over categories and create blank frame masks for each type of frame
+%   (we're using the frame types stored in the weights struct even if
+%   weighting is not enabled)
+weightCategories = fieldnames(weights);
+for weightCategoryIndex = 1:length(weightCategories)
+    weightCategory = weightCategories{weightCategoryIndex};
+    subWeights = weights.(weightCategory);
+    frameTypes = fieldnames(subWeights);
+    for frameTypeIndex = 1:length(frameTypes)
+        frameType = frameTypes{frameTypeIndex};
+        frameTypeMasks.(weightCategory).(frameType) = false(1, numFrames);
+    end
+end
+
+% Construct a blank spout position mask
+spoutPos = nan(1, numFrames);
+
+% Loop over videos and create corresponding lists of spout positions
 startFrame = 1;
 fprintf('Constructing frame type vectors...\n');
 for videoNum = 1:length(videoFilePaths)
@@ -301,24 +332,35 @@ for videoNum = 1:length(videoFilePaths)
     videoIdx(startFrame:endFrame) = videoNum * yes;
     frameIdx(startFrame:endFrame) = idx;
     if enableWeighting
+        % Since spout positions are only defined during the active trial 
+        % period (after cue for a set amount of time, extrapolate the spout
+        % positions before (and potentially after) the active trial period.
         currentSpoutIdx = lick_struct(videoNum).spoutPosition;
         currentSpoutIdx = [currentSpoutIdx(1)*ones(1, cueTimes(videoNum)), currentSpoutIdx];
         currentSpoutIdx = [currentSpoutIdx, currentSpoutIdx(end)*ones(1, videoLengths(videoNum) - length(currentSpoutIdx))];
+
         if any(isnan(currentSpoutIdx))
             badPos = unique(currentSpoutIdx(isnan(currentSpoutIdx)));
             error('Could not find some of this trial''s spout positions in list - %s. Something went wrong.', num2str(badPos));
         end
         spoutPos(startFrame:endFrame) = currentSpoutIdx;
 
+        % Update spout position masks for this video
+        spoutPositionNames = sort(fieldnames(frameTypeMasks.spoutPosition));
+        for spoutPositionIndex = 1:length(spoutPositionNames)
+            spoutPositionName = spoutPositionNames{spoutPositionIndex};
+            frameTypeMasks.spoutPosition.(spoutPositionName)(startFrame:endFrame) = (spoutPos(startFrame:endFrame) == spoutPositionIndex);
+        end
+
         for spoutContactNum = 1:length(lick_struct(videoNum).sp_contact_onset)
             onset = lick_struct(videoNum).sp_contact_onset(spoutContactNum) + cueTimes(videoNum);
             offset = lick_struct(videoNum).sp_contact_offset(spoutContactNum) + cueTimes(videoNum);
-            tongueTypeMasks.noSpoutContactTongue(startFrame:endFrame) = ...
+            frameTypeMasks.tongueType.noSpoutContactTongue(startFrame:endFrame) = ...
                 (((onset - idx) < periContactTongueFrameMargin) & ((onset - idx) > 0)) | ...
                 (((idx - offset) < periContactTongueFrameMargin) & ((idx - offset > 0)));
-            tongueTypeMasks.spoutContactTongue(startFrame:endFrame) = ...
+            frameTypeMasks.tongueType.spoutContactTongue(startFrame:endFrame) = ...
                 ((idx - onset) >= 0) & ((offset - idx) >= 0);
-            tongueTypeMasks.noTongue = ~tongueTypeMasks.noSpoutContactTongue & ~tongueTypeMasks.spoutContactTongue;
+            frameTypeMasks.tongueType.noTongue = ~frameTypeMasks.tongueType.noSpoutContactTongue & ~frameTypeMasks.tongueType.spoutContactTongue;
         end
         if tStatsPresent
             pairs = lick_struct(videoNum).pairs;
@@ -333,7 +375,7 @@ for videoNum = 1:length(videoFilePaths)
                 retractionOffset = pair(2);
                 smallTongueProtruding = ((idx - protrusionOnset  + periProtrusionOnsetFrameMargin(1))  >= 0) & ((idx - protrusionOnset  - periProtrusionOnsetFrameMargin(2))  <= 0);
                 smallTongueRetracting = ((idx - retractionOffset + periRetractionOffsetFrameMargin(1)) >= 0) & ((idx - retractionOffset - periRetractionOffsetFrameMargin(2)) <= 0);
-                tongueTypeMasks.smallTongue(startFrame:endFrame) = tongueTypeMasks.smallTongue(startFrame:endFrame) | smallTongueProtruding | smallTongueRetracting;
+                frameTypeMasks.tongueType.smallTongue(startFrame:endFrame) = frameTypeMasks.tongueType.smallTongue(startFrame:endFrame) | smallTongueProtruding | smallTongueRetracting;
             end
         end
     end
@@ -352,20 +394,21 @@ if enableWeighting
         warning('Expected three spout positions, instead found %d.', length(spoutTargets));
     end
 
-    tongueTypes = fieldnames(tongueTypeMasks);
+    tongueTypes = fieldnames(frameTypeMasks.tongueType);
     % Determine how many frame types we're balancing the randomization across
     numTongueTypes = length(tongueTypes);
 
     % Pick random frame numbers, balanced by frame type according to weights
     for spoutTarget = spoutTargets
+        spoutPositionName = sprintf('Position%d', spoutTarget);
         for tongueTypeIdx = 1:numTongueTypes
             % get tongue type of this group (no tongue / no contact tongue / tongue with spout contact
             tongueType = tongueTypes{tongueTypeIdx};
             % Determine size of this group based on weights
-            groupSize = floor(numAnnotations * weights.(tongueType) / length(spoutTargets));
+            groupSize = floor(numAnnotations * weights.tongueType.(tongueType) * weights.spoutPosition.(spoutPositionName));
 %            groupSize = floor(equalGroupSize * weights.(tongueType) * numTongueTypes / length(spoutTargets));
             % Create mask for which indices satisfy this group's criteria
-            groupMask = (spoutPos == spoutTarget) & tongueTypeMasks.(tongueType);
+            groupMask = frameTypeMasks.spoutPosition.(spoutPositionName) & frameTypeMasks.tongueType.(tongueType);
             % Map mask onto actual indices for this group
             groupIdx = overallIdx(groupMask);
             % Make sure we aren't trying to draw more samples than frames
@@ -404,9 +447,9 @@ chosenFrameIdx = frameIdx(chosenIdx);  % Chosen frame indices, numbered within e
 
 if enableWeighting && plotFlag
     figure; hold on;
-    plot(tongueTypeMasks.spoutContactTongue, 'DisplayName', 'Spout contact')
-    plot(tongueTypeMasks.noSpoutContactTongue + 1.5, 'DisplayName', 'Tongue but no contact')
-    plot(tongueTypeMasks.noTongue + 3, 'DisplayName', 'No tongue')
+    plot(frameTypeMasks.tongueType.spoutContactTongue, 'DisplayName', 'Spout contact')
+    plot(frameTypeMasks.tongueType.noSpoutContactTongue + 1.5, 'DisplayName', 'Tongue but no contact')
+    plot(frameTypeMasks.tongueType.noTongue + 3, 'DisplayName', 'No tongue')
     plot(diff(videoIdx)* 7, 'k:', 'DisplayName', 'Trial number')
     plot(spoutPos+3.5, 'DisplayName', 'Spout position index')
     x = zeros(size(overallIdx));
@@ -508,6 +551,9 @@ if length(MLTargets) == 1
 elseif length(MLTargets) == 2
     disp('Warning, session found with only two unique ML actuator targets.');
     MLTargets = [MLTargets(1), MLTargets(2), NaN];
+elseif length(MLTargets) > 3
+    disp('Warning, session found with more than two unique ML actuator targets.');
+    MLTargets = [MLTargets(1), MLTargets(2), MLTargets(3)];
 end
 
 % Convert actuator commands to target indices
