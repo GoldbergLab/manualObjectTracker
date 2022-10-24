@@ -1000,7 +1000,12 @@ set(handles.tagText, 'String', tags);
 
 function handles = updateTagDisplay(handles)
 % Set tag display to the current tags
-handles = setTagDisplay(handles, handles.ROIData.(handles.currUser).tags{handles.k});
+
+% Don't know why it's necessary to check if tags is empty...shouldn't
+% really be empty...figure out later
+if ~isempty(handles.ROIData.(handles.currUser).tags)
+    handles = setTagDisplay(handles, handles.ROIData.(handles.currUser).tags{handles.k});
+end
 
 function handles = updateDisplay(handles)
 % Master function that updates the entire GUI (mostly the stuff drawn on the axes) as is necessary
