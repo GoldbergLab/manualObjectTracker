@@ -1208,6 +1208,10 @@ else
     handles.zooming = false;
     dx = x - handles.zoomStart(1);
     dy = y - handles.zoomStart(2);
+    if dx == 0 || dy == 0
+        % Invalid zoom box - cancel zoom
+        return;
+    end
     axis_dx = handles.axes1.XLim(2) - handles.axes1.XLim(1);
     axis_dy = handles.axes1.YLim(2) - handles.axes1.YLim(1);
     xRatio = abs(dx/axis_dx);
