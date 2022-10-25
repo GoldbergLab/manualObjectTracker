@@ -1,9 +1,9 @@
-function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath, baseDirectory, saveFilepath, topOrigin, topSize, botOrigin, botSize, topROINum)
+function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath, baseDirectory, saveFilepath, topOrigin, topSize, botOrigin, botSize, topROINum, skipUnlabeled)
 % Takes a file containing video names and a corresponding random selection 
 %   of frame numbers to annotate, and generates a video file composed of
 %   the randomly selected frames, as well as an ROI .mat file composed of
 %   the corresponding ROI annotations
-
+%
 % prerandomizedAnnotationFilepath:  File containing randomized video and frame
 %                                       number selections
 % baseDirectory:                    Base directory in which to recursively search for videos
@@ -22,6 +22,9 @@ function assembleRandomManualTrackingAnnotations(prerandomizedAnnotationFilepath
 %                                   bottom mask in pixels
 % topROINum:                        Either 1 or 2 - which ROI number
 %                                   represents the top mask.
+% skipUnlabeled:                    Optional boolean flag indicating
+%                                   whether or not to skip frames that are
+%                                   unlabeled. Default is true.
 %
 % Written by Brian Kardon bmk27@cornell.edu 2018
 
@@ -32,9 +35,13 @@ else
     makeTrainingFile = true;
 end
 
+if ~exist('skipUnlabeled', 'var') || isempty(skipUnlabeled)
+    skipUnlabeled = true;
+end
+
 [saveFiledir, ~, ~] = fileparts(saveFilepath);
 if ~exist(saveFiledir, 'dir') && ~isempty(saveFiledir)
-    disp(['Creating save file directory: ', saveFiledir])
+    fprintf('Creating save file directory: %s\n', saveFiledir)
     mkdir(saveFiledir);
 end
 
@@ -47,7 +54,13 @@ manualTrackingList = s.manualTrackingList;
 
 % Retrieve information about the video files
 numVideos = length(manualTrackingList);
+
+% Num frames is the number of frames in the manual tracking list. However,
+%   if "skipUnlabeled" is true, this may not be the number of frames in the
+%   output files.
 numFrames = sum(cellfun(@length, {manualTrackingList.frameNumbers}));
+
+numLabeledFrames = 0;
 
 % In case videos are on a network drive and were annotated while the
 % network drive was mounted under a different letter, swap out the drive
@@ -62,40 +75,34 @@ numROIs = 2;
 
 % Initialize output data struct
 outputStruct.videoFile = 'Assembled from various videos. See originalVideoPaths field for the video that corresponds to each frame';
-outputStruct.videoSize = [videoDataSize(1:2), numFrames];
 outputStruct.ROIData = [];
 outputStruct.manualObjectTrackerVersion = 'Assembled from various ROI files.';
 outputStruct.originalFrameNumbers = [];
 outputStruct.originalVideoPaths = {};
 
 % Preallocate video data
-selectedVideoData = zeros([videoDataSize(1:2), numFrames], 'uint8');
+selectedVideoData = zeros([videoDataSize(1:2), 1], 'uint8');
 frameNumberCount = 0;
 
 % Loop over each video
 for k = 1:numVideos
-    disp(['Gathering info from video ', num2str(k), ' of ', num2str(numVideos)]);
+    fprintf('Gathering info from video %d of %d\n', k, numVideos);
     frameNumbers = manualTrackingList(k).frameNumbers;
     videoFilename = manualTrackingList(k).videoFilename;
     videoFilepath = fullfile(manualTrackingList(k).videoPath, manualTrackingList(k).videoFilename);
     videoFilepath = switchDrive(videoFilepath, actualDrive, false);
-
-    % Load video from current video filename
-    videoData = loadVideoData(videoFilepath);
-
-    % Extract selected frames from video and add them to the video data
-    selectedVideoData(:, :, frameNumberCount+1:frameNumberCount+length(frameNumbers)) = videoData(:, :, frameNumbers);
+    videoData = [];
 
     % Locate ROI file to load for this video
     ROIRegexp = translateVideoNameToROIRegexp(videoFilename);
-    ROIFiles = findFilesByRegex(baseDirectory, ROIRegexp);
+    ROIFiles = findFilesByRegex(baseDirectory, ROIRegexp, false, 1);
     if isempty(ROIFiles)
-        disp(['Warning, no ROI file found for video', videoFilename])
+        fprintf('Warning, no ROI file found for video %s\n', videoFilename);
         ROIFile = [];
         usersCurrent = {};
     else
         if length(ROIFiles) > 1
-            disp(['Warning, multiple ROI files matched video', videoFilename])
+            fprintf('Warning, multiple ROI files matched video %s\n', videoFilename);
         end
         ROIFile = ROIFiles{1};
         % Load current ROI data
@@ -109,26 +116,71 @@ for k = 1:numVideos
     for j = 1:length(usersCurrent)
         userCurrent = usersCurrent{j};
         if ~isfield(outputStruct.ROIData, userCurrent)
-            outputStruct.ROIData.(userCurrent) = createNewUserROIData(numFrames, numROIs);
+            outputStruct.ROIData.(userCurrent) = createNewUserROIData(1, numROIs);
         end
     end
 
-    % Update the originalFrameNumbers and originalVideoPaths fields with
-    %   the new data
-    outputStruct.originalFrameNumbers = [outputStruct.originalFrameNumbers, frameNumbers];
-    outputStruct.originalVideoPaths = [outputStruct.originalVideoPaths, repmat(videoFilename, [1, length(frameNumbers)])];
+    % Loop over the frames annoted in this video
+    for frameNumber = frameNumbers
+        % Extract the ROI annotations for the selected frame from the ROI file
+        labelingFound = false;
+        for j = 1:numel(usersCurrent)
+            user = usersCurrent{j};
+            newXPoints{j} = outputStructCurrent.ROIData.(user).xPoints(:, frameNumber);
+            newYPoints{j} = outputStructCurrent.ROIData.(user).yPoints(:, frameNumber);
+            newXFreehands{j} = outputStructCurrent.ROIData.(user).xFreehands(:, frameNumber);
+            newYFreehands{j} = outputStructCurrent.ROIData.(user).yFreehands(:, frameNumber);
+            newAbsent{j} = outputStructCurrent.ROIData.(user).absent(:, frameNumber);
 
-    % Extract the ROI annotations for the selected frames from the ROI file
-    for j = 1:numel(usersCurrent)
-        user = usersCurrent{j};
-        outputStruct.ROIData.(user).xPoints(:,frameNumberCount+1:frameNumberCount+length(frameNumbers)) = outputStructCurrent.ROIData.(user).xPoints(:, frameNumbers);
-        outputStruct.ROIData.(user).yPoints(:,frameNumberCount+1:frameNumberCount+length(frameNumbers)) = outputStructCurrent.ROIData.(user).yPoints(:, frameNumbers);
-        outputStruct.ROIData.(user).xFreehands(:,frameNumberCount+1:frameNumberCount+length(frameNumbers)) = outputStructCurrent.ROIData.(user).xFreehands(:, frameNumbers);
-        outputStruct.ROIData.(user).yFreehands(:,frameNumberCount+1:frameNumberCount+length(frameNumbers)) = outputStructCurrent.ROIData.(user).yFreehands(:, frameNumbers);
-        outputStruct.ROIData.(user).absent(:,frameNumberCount+1:frameNumberCount+length(frameNumbers)) = outputStructCurrent.ROIData.(user).absent(:, frameNumbers);
+            % Check if there are any labels of any kind
+            pointLabels = any(cellfun(@(x)~isempty(x), newXPoints{j}), 'all');
+            freehandLabels = any(cellfun(@(x)~isempty(x), newXFreehands{j}), 'all');
+            absentLabels = any(newAbsent{j}, 'all');
+            labelingFound = labelingFound || pointLabels || freehandLabels || absentLabels;
+        end
+
+        % Update the count of how many frames were found to be labeled
+        numLabeledFrames = numLabeledFrames + labelingFound;
+
+        if skipUnlabeled && ~labelingFound
+            % If there are no labels of any kind, and the user requested
+            %   that unlabeled frames not be included, don't record this 
+            %   frame, just skip to the next one
+            fprintf('    No labeling found - skipping frame %d\n', frameNumber);
+            continue;
+        end
+
+        % Store the extracted ROI data from the selected frame
+        for j = 1:numel(usersCurrent)
+            outputStruct.ROIData.(user).xPoints(:,frameNumberCount+1) = newXPoints{j};
+            outputStruct.ROIData.(user).yPoints(:,frameNumberCount+1) = newYPoints{j};
+            outputStruct.ROIData.(user).xFreehands(:,frameNumberCount+1) = newXFreehands{j};
+            outputStruct.ROIData.(user).yFreehands(:,frameNumberCount+1) = newYFreehands{j};
+            outputStruct.ROIData.(user).absent(:,frameNumberCount+1) = newAbsent{j};
+        end
+    
+        % Load video from current video filename if it hasn't been loaded
+        % already
+        if isempty(videoData)
+            videoData = loadVideoData(videoFilepath);
+        end
+    
+        % Extract selected frame from video and add it to the video data
+        selectedVideoData(:, :, frameNumberCount+1) = videoData(:, :, frameNumber);
+
+        % Update the originalFrameNumbers and originalVideoPaths fields with
+        %   the new data
+        outputStruct.originalFrameNumbers = [outputStruct.originalFrameNumbers, frameNumber];
+        outputStruct.originalVideoPaths = [outputStruct.originalVideoPaths, videoFilename];
+
+        frameNumberCount = frameNumberCount + 1;
     end
-    frameNumberCount = frameNumberCount + length(frameNumbers);
 end
+
+fprintf('\n')
+fprintf('Number of frames processed: %d\n', numFrames);
+fprintf('Number of frames labeled:   %d\n', numLabeledFrames);
+fprintf('\n')
 
 % Strip extension from saveFilename
 [savePath, saveName, ~] = fileparts(saveFilepath);
@@ -137,6 +189,10 @@ saveFilepathBase = fullfile(savePath, saveName);
 % Save selected video
 assembledVideoPath = [saveFilepathBase, '.avi'];
 saveVideoData(selectedVideoData, assembledVideoPath);
+
+% Note the video size in the ROI struct
+outputStruct.videoSize = size(selectedVideoData);
+
 % Save selected ROI annotations
 assembledROIPath = [saveFilepathBase, '_ROI.mat'];
 save(assembledROIPath, 'outputStruct');
