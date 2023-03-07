@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 21-Oct-2022 14:34:29
+% Last Modified by GUIDE v2.5 04-Mar-2023 20:53:24
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -357,11 +357,8 @@ params.clipRadius = str2double(handles.clipRadius.String);
 params.saveFilepath = fullfile(params.clipDirectory, saveFilename);
 
 params.weightingFilePaths = getWeightingFilePaths(handles);
-if handles.weightedRandomizationCheckbox.Value
-    params.trialAlignment = getTrialAlignment(handles);
-else
-    params.trialAlignment = struct();
-end
+params.trialAlignment = getTrialAlignment(handles);
+
 params.enableWeighting = handles.weightedRandomizationCheckbox.Value;
 params.weights.tongueType.noTongue = str2double(handles.noTongueWeight.String);
 params.weights.tongueType.spoutContactTongue = str2double(handles.spoutContactWeight.String);
@@ -375,6 +372,73 @@ spoutPositionWeights = eval(handles.spoutPositionWeights.String);
 for spoutPositionIndex = 1:length(spoutPositionWeights)
     spoutPosition = sprintf('Position%d', spoutPositionIndex);
     params.weights.spoutPosition.(spoutPosition) = spoutPositionWeights(spoutPositionIndex);
+end
+
+params.t_stats_filter_field_names = get_t_stats_filter_field_names(handles);
+params.t_stats_filters = get_t_stats_filters(handles);
+[params.t_stats_filter_offsets, params.t_stats_filter_offset_anchors] = get_t_stats_filter_offsets(handles);
+
+function t_stats_filter_field_names = get_t_stats_filter_field_names(handles)
+raw_text = handles.t_stats_filter_field_names.String;
+switch class(raw_text)
+    case 'char'
+        t_stats_filter_field_names = char2D_to_cell(raw_text);
+    case 'cell'
+        t_stats_filter_field_names = raw_text;
+end
+
+function t_stats_filters = get_t_stats_filters(handles)
+raw_text = handles.t_stats_filters.String;
+switch class(raw_text)
+    case 'char'
+        cell_text = char2D_to_cell(raw_text);
+    case 'cell'
+        cell_text = raw_text;
+end
+t_stats_filters = cell(1, length(cell_text));
+for k = 1:length(cell_text)
+    try
+        t_stats_filters{k} = eval(cell_text{k});
+    catch
+        t_stats_filters{k} = jsondecode(cell_text{k})';
+    end
+
+    switch class(t_stats_filters{k})
+        case 'cell'
+        case 'function_handle'
+        otherwise
+            error('t_stats filters must be either a cell array of values to match, or a handle to a function that produces either a true or false output.')
+    end
+end
+
+function [t_stats_filter_offsets, t_stats_filter_offset_anchors] = get_t_stats_filter_offsets(handles)
+raw_text = handles.t_stats_filter_offsets.String;
+switch class(raw_text)
+    case 'char'
+        cell_text = char2D_to_cell(raw_text);
+    case 'cell'
+        cell_text = raw_text;
+end
+
+t_stats_filter_offsets = cell(1, length(cell_text));
+t_stats_filter_offset_anchors = cell(1, length(cell_text));
+for k = 1:length(t_stats_filter_offsets)
+    if isempty(strtrim(cell_text{k}))
+        % Default offset
+        cell_text{k} = '0p, 0r';
+    end
+    tokens = regexp(cell_text{k}, '(-?[0-9]+)\ *(r|p)?\ *,\ *(-?[0-9]+)\ *(r|p)?', 'tokens');
+    if isempty(tokens)
+        error('t_stats filter offets must be two comma-separated numbers. Each number may be optionally followed by "p" or "r", indicating that the offset is relative to protrusion onset or retraction offset respectively.')
+    end
+    t_stats_filter_offsets{k} = [str2double(tokens{1}{1}), str2double(tokens{1}{3})];
+    t_stats_filter_offset_anchors{k} = 'pr';
+    if ~isempty(tokens{1}{2})
+        t_stats_filter_offset_anchors{k}(1) = tokens{1}{2};
+    end
+    if ~isempty(tokens{1}{4})
+        t_stats_filter_offset_anchors{k}(2) = tokens{1}{4};
+    end
 end
 
 function handles = loadParams(handles, params)
@@ -422,6 +486,46 @@ if ~isfield(params, 'enableWeighting')
 end
 handles.weightedRandomizationCheckbox.Value = params.enableWeighting;
 handles = updateWeightedRandomizationState(handles, params.enableWeighting);
+
+if isfield(params, 't_stats_filter_field_names')
+    handles.t_stats_filter_field_names.String = params.t_stats_filter_field_names;
+else
+    handles.t_stats_filter_field_names.String = {};
+end
+
+if isfield(params, 't_stats_filters')
+    t_stats_filters = cell(1, length(params.t_stats_filters));
+    for k = 1:length(params.t_stats_filters)
+        switch class(params.t_stats_filters{k})
+            case 'cell'
+                t_stats_filters{k} = jsonencode(params.t_stats_filters{k});
+            case 'function_handle'
+                t_stats_filters{k} = func2str(params.t_stats_filters{k});
+            otherwise
+                error('t_stats_filters must be either cell arrays of values to match, or a handle to a function that returns a boolean value');
+        end
+    end
+    handles.t_stats_filters.String = t_stats_filters;
+else
+    handles.t_stats_filters.String = {};
+end
+
+if isfield(params, 't_stats_filter_offsets') && isfield(params, 't_stats_filter_offset_anchors')
+    offsets = cell(1, length(params.t_stats_filter_offsets));
+    for k = 1:length(params.t_stats_filter_offsets)
+        offsets{k} = ...
+        [num2str(params.t_stats_filter_offsets{k}(1)), ...
+        params.t_stats_filter_offset_anchors{k}(1),    ...
+        ', ',                                          ...
+        num2str(params.t_stats_filter_offsets{k}(2)),  ...
+        params.t_stats_filter_offset_anchors{k}(2)];
+    end
+
+    handles.t_stats_filter_offsets.String = offsets;
+else
+    handles.t_stats_filter_offsets.String = {};
+end
+
 
 % --- Executes on button press in runButton.
 function runButton_Callback(hObject, eventdata, handles)
@@ -681,11 +785,11 @@ if state
 else
     enableState = 'off';
 end
-handles.weightingFilePaths.Enable = enableState;
-handles.WeightingFileBrowseButton.Enable = enableState;
-handles.alignFPGAWithVideoButton.Enable = enableState;
-handles.FPGAAlignmentWithVideo.Enable = enableState;
-handles.videoAlignmentWithFPGA.Enable = enableState;
+% handles.weightingFilePaths.Enable = enableState;
+% handles.WeightingFileBrowseButton.Enable = enableState;
+% handles.alignFPGAWithVideoButton.Enable = enableState;
+% handles.FPGAAlignmentWithVideo.Enable = enableState;
+% handles.videoAlignmentWithFPGA.Enable = enableState;
 handles.tongueNoContactWeight.Enable = enableState;
 handles.smallTongueWeight.Enable = enableState;
 handles.noTongueWeight.Enable = enableState;
@@ -739,7 +843,7 @@ function videoPathSwapButton_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 handles = guidata(hObject);
-newVideoRootDirectories = PathSwap(handles.videoRootDirectories.String);
+newVideoRootDirectories = PathSwap(getVideoRootDirectories(handles));
 if iscell(newVideoRootDirectories)
     handles.videoRootDirectories.String = newVideoRootDirectories;
 end
@@ -752,7 +856,7 @@ function dataPathSwapButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 handles = guidata(hObject);
-newWeightingFilePaths = PathSwap(handles.weightingFilePaths.String);
+newWeightingFilePaths = PathSwap(getWeightingFilePaths(handles));
 if iscell(newWeightingFilePaths)
     handles.weightingFilePaths.String = newWeightingFilePaths;
 end
@@ -772,6 +876,75 @@ function spoutPositionWeights_Callback(hObject, eventdata, handles)
 % --- Executes during object creation, after setting all properties.
 function spoutPositionWeights_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to spoutPositionWeights (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function t_stats_filter_field_names_Callback(hObject, eventdata, handles)
+% hObject    handle to t_stats_filter_field_names (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of t_stats_filter_field_names as text
+%        str2double(get(hObject,'String')) returns contents of t_stats_filter_field_names as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function t_stats_filter_field_names_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to t_stats_filter_field_names (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function t_stats_filters_Callback(hObject, eventdata, handles)
+% hObject    handle to t_stats_filters (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of t_stats_filters as text
+%        str2double(get(hObject,'String')) returns contents of t_stats_filters as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function t_stats_filters_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to t_stats_filters (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function t_stats_filter_offsets_Callback(hObject, eventdata, handles)
+% hObject    handle to t_stats_filter_offsets (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of t_stats_filter_offsets as text
+%        str2double(get(hObject,'String')) returns contents of t_stats_filter_offsets as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function t_stats_filter_offsets_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to t_stats_filter_offsets (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 

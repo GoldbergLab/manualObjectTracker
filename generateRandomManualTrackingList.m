@@ -55,6 +55,36 @@ if isstruct(videoBaseDirectoriesOrStruct)
     else
         allVideosSameLength = p.allVideosSameLength;
     end
+
+    if isfield(p, 't_stats_filter_field_names')
+        t_stats_filter_field_names = p.t_stats_filter_field_names;
+    else
+        t_stats_filter_field_names = {};
+    end
+    if isfield(p, 't_stats_filters')
+        t_stats_filters = p.t_stats_filters;
+
+        % Convert any cell array filters into function filters
+        for k = 1:length(t_stats_filters)
+            switch class(t_stats_filters{k})
+                case 'cell'
+                    filter_values = t_stats_filters{k};
+                    t_stats_filters{k} = @(v)ismember(v, filter_values);
+            end
+        end
+
+    else
+        t_stats_filters = {};
+    end
+    if isfield(p, 't_stats_filter_offsets') && isfield(p, 't_stats_filter_offset_anchors')
+        t_stats_filter_offsets = p.t_stats_filter_offsets;
+        t_stats_filter_offset_anchors = p.t_stats_filter_offset_anchors;
+    else
+        t_stats_filter_offsets = {};
+        t_stats_filter_offset_anchors = {};
+    end
+    num_t_stats_filters = min([length(t_stats_filter_field_names), length(t_stats_filters), length(t_stats_filter_offsets)]);
+
 end
 
 if ~exist('clipDirectory', 'var')
@@ -81,7 +111,7 @@ periRetractionOffsetFrameMargin = [2, 1];  % For small tongue, how many frames b
 disp('Finding matching files with correct extension...');
 videoFilePaths = cellfun(@(videoBaseDirectory)findFilesByExtension(videoBaseDirectory, extensions, false), videoBaseDirectories, 'UniformOutput', false);
 tStatsPresent = false;
-if enableWeighting
+if enableWeighting || num_t_stats_filters > 0
     dataStructs = loadDataStructs(dataFilePaths);
     if isfield(dataStructs, 'lick_struct')
         % These must be lick_struct files.
@@ -94,6 +124,12 @@ if enableWeighting
             for trialNum = 1:length(lickStructs(sessionNum).lick_struct)
                 t_stats = dataStructs(sessionNum).t_stats;
                 lickStructs(sessionNum).lick_struct(trialNum).pairs = {t_stats([t_stats.trial_num] == trialNum).pairs};
+                for filter_field_num = 1:num_t_stats_filters
+                    % Copy selected t_stats fields/values over to lick_struct to
+                    % be used for filtering output frames
+                    field_name = t_stats_filter_field_names{filter_field_num};
+                    lickStructs(sessionNum).lick_struct(trialNum).t_stats.(field_name) = {t_stats([t_stats.trial_num] == trialNum).(field_name)};
+                end
             end
         end
     else
@@ -118,7 +154,7 @@ end
 sessionIdxToDelete = [];
 
 fprintf('Trimming videos and lick_structs so their start times match...\n');
-if enableWeighting
+if enableWeighting || num_t_stats_filters > 0
     numSessions = min([length(videoFilePaths), length(dataFilePaths), length(trialAlignment)]);
     for sessionNum = 1:numSessions
         displayProgress('%d of %d sessions trimmed...\n', sessionNum, numSessions, 10);
@@ -151,7 +187,7 @@ end
 
 % Concatenate video paths and lick structs into one long list
 videoFilePaths = horzcat(videoFilePaths{:});
-if enableWeighting
+if enableWeighting || num_t_stats_filters > 0
     lick_struct = horzcat(lickStructs.lick_struct);
 
     % Add in spout contact onset/offsets:
@@ -168,7 +204,7 @@ if ischar(videoRegex)
     regexFilterIdx = 1:length(videoFilePaths);
     regexFilterIdx = regexFilterIdx(~cellfun(@isempty, regexp(videoFilePaths, videoRegex)));
     videoFilePaths = videoFilePaths(regexFilterIdx);
-    if enableWeighting
+    if enableWeighting || num_t_stats_filters > 0
         lick_struct = lick_struct(regexFilterIdx);
     end
 elseif isnumeric(videoRegex)
@@ -178,7 +214,7 @@ elseif isnumeric(videoRegex)
         % If number is not 0, randomly sample that # of videos and lick
         % struct trials
         [videoFilePaths, randomIdx] = datasample(videoFilePaths, sampleNum, 'Replace',false);
-        if enableWeighting
+        if enableWeighting || num_t_stats_filters > 0
             lick_struct = lick_struct(randomIdx);
         end
     end
@@ -220,6 +256,7 @@ for videoNum = 1:length(videoFilePaths)
             invalidIndices(end+1) = videoNum;
         end
     catch ME
+        getReport(ME);
         invalidIndices(end+1) = videoNum;
     end
     fprintf('\tVideo length = %d\n', videoSize(3));
@@ -256,8 +293,8 @@ if enableWeighting
         videoName = videoFilePaths{videoNum};
         out = regexp(videoName, '_C([0-9]+)L?\.[aA][vV][iI]$', 'tokens');
         try
-            cueTimes(videoNum) = str2double(out{1}{1});
-        catch ME
+            cueTimes(videoNum) = str2double(out{1}{1}); %#ok<*AGROW> 
+        catch
             warning('Could not determine cue time for video %s based on filename. Defaulting to %d.', videoName, defaultCueTime);
             cueTimes(videoNum) = defaultCueTime;
         end
@@ -317,9 +354,20 @@ end
 % Construct a blank spout position mask
 spoutPos = nan(1, numFrames);
 
+if tStatsPresent
+    if num_t_stats_filters > 0
+        % Create a blank t_stats-based mask for filtering based on lick data
+        % from t_stats
+        tStatsMask = false(1, numFrames);
+    else
+        % No t_stats filters provided
+        tStatsMask = true(1, numFrames);
+    end
+end
+
 % Loop over videos and create corresponding lists of spout positions
 startFrame = 1;
-fprintf('Constructing frame type vectors...\n');
+fprintf('Constructing frame masks...\n');
 for videoNum = 1:length(videoFilePaths)
     displayProgress('%d of %d trials analyzed...\n', videoNum, length(videoFilePaths), 50);
     yes = ones(1, videoLengths(videoNum));
@@ -362,27 +410,64 @@ for videoNum = 1:length(videoFilePaths)
                 ((idx - onset) >= 0) & ((offset - idx) >= 0);
             frameTypeMasks.tongueType.noTongue = ~frameTypeMasks.tongueType.noSpoutContactTongue & ~frameTypeMasks.tongueType.spoutContactTongue;
         end
-        if tStatsPresent
-            pairs = lick_struct(videoNum).pairs;
-            for lickNum = 1:length(pairs)
-                pair = pairs{lickNum};
-                if isnan(pair)
-                    % Occasionally an onset/offset lick comes up as NaN -
-                    % not sure why.
-                    continue;
-                end
-                protrusionOnset = pair(1);
-                retractionOffset = pair(2);
+    end
+    if tStatsPresent
+        pairs = lick_struct(videoNum).pairs;
+        disp(videoFilePaths{videoNum})
+        for lickNum = 1:length(pairs)
+            pair = pairs{lickNum};
+            if isnan(pair)
+                % Occasionally an onset/offset lick comes up as NaN -
+                % not sure why.
+                continue;
+            end
+            protrusionOnset = pair(1);
+            retractionOffset = pair(2);
+            if enableWeighting
                 smallTongueProtruding = ((idx - protrusionOnset  + periProtrusionOnsetFrameMargin(1))  >= 0) & ((idx - protrusionOnset  - periProtrusionOnsetFrameMargin(2))  <= 0);
                 smallTongueRetracting = ((idx - retractionOffset + periRetractionOffsetFrameMargin(1)) >= 0) & ((idx - retractionOffset - periRetractionOffsetFrameMargin(2)) <= 0);
                 frameTypeMasks.tongueType.smallTongue(startFrame:endFrame) = frameTypeMasks.tongueType.smallTongue(startFrame:endFrame) | smallTongueProtruding | smallTongueRetracting;
+            end
+            % If present, find matching frame mask for t_stats filters
+            % for this lick
+            lick_filter_match = true;
+            fprintf('  Lick #%d\n', lickNum);
+            for filter_field_num = 1:num_t_stats_filters
+                field_name = t_stats_filter_field_names{filter_field_num};
+                field_value = lick_struct(videoNum).t_stats.(field_name){lickNum};
+                lick_filter_match = lick_filter_match & t_stats_filters{filter_field_num}(field_value);   
+                fprintf('    Checking %s:\n', field_name);
+                fprintf('      %d\n\n', t_stats_filters{filter_field_num}(field_value))
+            end
+            if lick_filter_match
+                % This lick matched all filters. Using provided 
+                % offsets, mark the corresponding frame ranges as 
+                % included in the potential output
+                for filter_field_num = 1:num_t_stats_filters
+                    offset = t_stats_filter_offsets{filter_field_num};
+                    offset_anchors = t_stats_filter_offset_anchors{filter_field_num};
+                    switch offset_anchors(1)
+                        case 'p'
+                            startInclude = protrusionOnset + offset(1);
+                        case 'r'
+                            startInclude = retractionOffset + offset(1);
+                    end
+                    switch offset_anchors(2)
+                        case 'p'
+                            endInclude = protrusionOffset + offset(2);
+                        case 'r'
+                            endInclude = retractionOffset + offset(2);
+                    end
+                    this_tStatsMask = (((idx - startInclude) >= 0) & ((idx - endInclude) <= 0));
+                    tStatsMask(startFrame:endFrame) = tStatsMask(startFrame:endFrame) | this_tStatsMask;
+                end
             end
         end
     end
     
     startFrame = endFrame + 1;
 end
-fprintf('...done constructing frame type vectors.\n');
+fprintf('...done constructing frame masks.\n');
 
 chosenIdx = [];
 
@@ -408,7 +493,7 @@ if enableWeighting
             groupSize = floor(numAnnotations * weights.tongueType.(tongueType) * weights.spoutPosition.(spoutPositionName));
 %            groupSize = floor(equalGroupSize * weights.(tongueType) * numTongueTypes / length(spoutTargets));
             % Create mask for which indices satisfy this group's criteria
-            groupMask = frameTypeMasks.spoutPosition.(spoutPositionName) & frameTypeMasks.tongueType.(tongueType);
+            groupMask = frameTypeMasks.spoutPosition.(spoutPositionName) & frameTypeMasks.tongueType.(tongueType) & tStatsMask;
             % Map mask onto actual indices for this group
             groupIdx = overallIdx(groupMask);
             % Make sure we aren't trying to draw more samples than frames
@@ -435,8 +520,10 @@ if enableWeighting
         chosenIdx = [chosenIdx, remainingChosenIdx];
     end
 else
+    % Filter with t_stats filters, if present
+    filteredIdx = overallIdx(tStatsMask);
     % Pick random frame numbers (without weighting)
-    chosenIdx = datasample(overallIdx, numAnnotations, 'Replace', false);
+    chosenIdx = datasample(filteredIdx, numAnnotations, 'Replace', false);
 end
 fprintf('...done choosing random frames.\n');
 
@@ -507,12 +594,12 @@ if ~isempty(saveFilepath)
     save(saveFilepath, 'manualTrackingList');
 end
 
-function bestDivisions = fairestDivision(num, divisor)
-% Divide up num into divisor groups that are as equal as possible, with the
-% requirement that the sum of the resulting divisions must be num.
-bestDivisions = ones(1, divisor) * floor(num/divisor);
-remainder = mod(num, divisor);
-bestDivisions(1:remainder) = bestDivisions(1:remainder) + 1;
+% function bestDivisions = fairestDivision(num, divisor)
+% % Divide up num into divisor groups that are as equal as possible, with the
+% % requirement that the sum of the resulting divisions must be num.
+% bestDivisions = ones(1, divisor) * floor(num/divisor);
+% remainder = mod(num, divisor);
+% bestDivisions(1:remainder) = bestDivisions(1:remainder) + 1;
 
 function [lick_struct, valid] = prepareLickStruct(lick_struct)
 
@@ -541,7 +628,7 @@ else
         % No targets or commands - create dummy ones
         MLTargets = 0;
         for k = 1:length(lick_struct)
-            lick_struct(k).actuator1_ML_command = repmat(0, [1, diff(lick_struct(k).rw_cue)+1]);
+            lick_struct(k).actuator1_ML_command = zeros([1, diff(lick_struct(k).rw_cue)+1]);
         end
     end
 end
@@ -564,11 +651,11 @@ end
 if ~any(strcmp('analog_lick', fns))
     % Add dummy analog lick field
     for k = 1:length(lick_struct)
-        lick_struct(k).analog_lick = repmat(NaN, [1, diff(lick_struct(k).rw_cue)+1]);
+        lick_struct(k).analog_lick = nan([1, diff(lick_struct(k).rw_cue)+1]);
     end
 end
 
-allowedLickStructFields = {'spoutPosition', 'analog_lick', 'rw_cue', 'pairs'};
+allowedLickStructFields = {'spoutPosition', 'analog_lick', 'rw_cue', 'pairs', 't_stats'};
 valid = true;
 
 % Trim lick_struct down to the necessary fields
