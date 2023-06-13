@@ -406,6 +406,8 @@ for k = 1:length(cell_text)
     switch class(t_stats_filters{k})
         case 'cell'
         case 'function_handle'
+        case {'double', 'single', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint6'}
+            t_stats_filters{k} = num2cell(t_stats_filters{k});
         otherwise
             error('t_stats filters must be either a cell array of values to match, or a handle to a function that produces either a true or false output.')
     end

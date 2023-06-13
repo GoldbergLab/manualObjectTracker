@@ -69,6 +69,9 @@ if isstruct(videoBaseDirectoriesOrStruct)
             switch class(t_stats_filters{k})
                 case 'cell'
                     filter_values = t_stats_filters{k};
+                    if all(cellfun(@isnumeric, filter_values))
+                        filter_values = cell2mat(filter_values);
+                    end
                     t_stats_filters{k} = @(v)ismember(v, filter_values);
             end
         end
@@ -84,6 +87,9 @@ if isstruct(videoBaseDirectoriesOrStruct)
         t_stats_filter_offset_anchors = {};
     end
     num_t_stats_filters = min([length(t_stats_filter_field_names), length(t_stats_filters), length(t_stats_filter_offsets)]);
+    if length(unique([length(t_stats_filter_field_names), length(t_stats_filters), length(t_stats_filter_offsets)])) > 1
+        warning('There should be the same number of t_stats field names, filters, and offsets.')
+    end
 
 end
 
@@ -435,7 +441,7 @@ for videoNum = 1:length(videoFilePaths)
             for filter_field_num = 1:num_t_stats_filters
                 field_name = t_stats_filter_field_names{filter_field_num};
                 field_value = lick_struct(videoNum).t_stats.(field_name){lickNum};
-                lick_filter_match = lick_filter_match & t_stats_filters{filter_field_num}(field_value);   
+                lick_filter_match = lick_filter_match & t_stats_filters{filter_field_num}(field_value);
                 fprintf('    Checking %s:\n', field_name);
                 fprintf('      %d\n\n', t_stats_filters{filter_field_num}(field_value))
             end
