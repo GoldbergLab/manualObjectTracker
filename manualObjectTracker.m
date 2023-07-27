@@ -121,6 +121,7 @@ handles.axes1.Visible = 'off';
 colormap(handles.axes1, 'gray');
 caxis(handles.axes1, 'manual');
 caxis(handles.axes1, [0, 255]);
+handles.imageTuner = @(imageData)imageData;
 %caxis(handles.axes1, [min(handles.videoData(:)), max(handles.videoData(:))]);
 
 % Create dummy distance measurement handle:
@@ -1035,7 +1036,7 @@ frameSize = size(frame);
 % axis(handles.axes1, 'equal');
 zoom(handles.axes1, [frameSize(2), frameSize(1)], handles.zoomCenter, handles.zoomFactor);
 
-set(handles.hImage, 'CData', frame);
+set(handles.hImage, 'CData', handles.imageTuner(frame));
 
 
 % Update ROI stats display
@@ -1930,12 +1931,13 @@ function useDefaultROIPath_Callback(~, ~, ~)
 
 
 % --- Executes on button press in adjustContrast.
-function adjustContrast_Callback(~, ~, handles)
+function adjustContrast_Callback(hObject, ~, handles)
 % hObject    handle to adjustContrast (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-imcontrast(handles.hImage);
-
+[~, handles.imageTuner] = imtune(handles.videoData(:, :, handles.k));
+handles = updateDisplay(handles);
+guidata(hObject, handles);
 
 % --- Executes on button press in pointModeButton.
 function pointModeButton_Callback(~, ~, ~)
@@ -2082,7 +2084,7 @@ n = handles.activeROINum;
 u = handles.currUser;
 handles = toggleTongueAbsent(handles, k, n, u);
 handles = noteThatChangesNeedToBeSaved(handles);
-handles = updateDisplay(handles)
+handles = updateDisplay(handles);
 guidata(hObject, handles)
 
 % --- Executes on button press in helpButton.
