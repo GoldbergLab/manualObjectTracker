@@ -50,7 +50,7 @@ function manualObjectTracker_OpeningFcn(hObject, ~, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to manualObjectTracker (see VARARGIN)
-handles.version = '1.14.1';
+handles.version = '1.15.1';
 
 ensureMOTIsOnPath()
 
@@ -399,8 +399,7 @@ if ischar(file)
             disp('Warning: Image data appears to be non-grayscale - currently only grayscale images are valid. Squashing colors...');
             imageData = rgb2gray(imageData);
         end
-        handles.videoData = zeros([size(imageData), 1]);
-        handles.videoData(:, :, 1) = imageData;
+        handles.videoData = reshape(imageData, [1, size(imageData)]);
     elseif strcmpi(fileExt, '.mat')
         % This may be a set of assembled random annotations, containing an
         % image stack and a corresponding mask stack
@@ -421,8 +420,8 @@ if ischar(file)
                 % Ok just pick the first non-mask-field as the image field
                 imageField = fieldNames{find(~maskMask, 1)};
             end
-            handles.videoData = permute(squeeze(data.(imageField)), [2, 3, 1]);
-            handles.maskData = permute(squeeze(data.(maskField)), [2, 3, 1]);
+            handles.videoData = squeeze(data.(imageField));
+            handles.maskData = squeeze(data.(maskField));
             % Set boolean flag indicating that masks are bunded together
             % with images, so we don't need to look for separate mask
             % files.
@@ -432,7 +431,7 @@ if ischar(file)
         end
     else
         % Must be a video file - load it
-        handles.videoData = squeeze(loadVideoData(file));
+        handles.videoData = squeeze(permute(loadVideoData(file), [3, 1, 2]));
     end
 else
     % It's video data
@@ -444,7 +443,7 @@ else
 end
 videoSize = size(handles.videoData);
 try
-    handles.numFrames = videoSize(3);
+    handles.numFrames = videoSize(1);
 catch
     handles.numFrames = 1;
 end
@@ -459,7 +458,7 @@ handles.k = 1;
 
 resetZoom = false;
 if resetZoom || any(isnan(handles.zoomCenter))
-    handles.zoomCenter = flip(size(handles.videoData(:, :, 1))/2);
+    handles.zoomCenter = size(handles.videoData, [3, 2])/2;
     handles.zoomFactor = 1;
 end
 
@@ -503,6 +502,12 @@ if handles.showMasks && ~handles.bundledMasks
     disp('done loading new masks!')
 end
 
+function frame = getFrame(handles, k)
+if ~exist('k', 'var') || isempty(k)
+    k = handles.k;
+end
+frame = squeeze(handles.videoData(k, :, :));
+
 function videoSize = getVideoSize(handles)
 vSize = size(handles.videoData);
 if isempty(vSize)
@@ -511,17 +516,17 @@ if isempty(vSize)
     nFrames = 0;
     nChannels = 0;
 elseif length(vSize) == 3
-    height = vSize(1);
-    width = vSize(2);
-    nFrames = vSize(3);
+    nFrames = vSize(1);
+    height = vSize(2);
+    width = vSize(3);
     nChannels = 1;
 elseif length(vSize) == 4
-    height = vSize(1);
-    width = vSize(2);
-    nFrames = vSize(3);
+    nFrames = vSize(1);
+    height = vSize(2);
+    width = vSize(3);
     nChannels = vSize(4);
 end
-videoSize = [height, width, nFrames, nChannels];
+videoSize = [nFrames, height, width, nChannels];
 
 function [x, y] = createBlankROIs(numFrames, numROIs)
 % Create blank datastructure for holding a set of ROIs
@@ -659,7 +664,7 @@ switch EventData.Key
             handles.showAllUserData = ~handles.showAllUserData;
         else
             % a = Reset zoom to default
-            frameSize = flip(size(handles.videoData(:, :, 1)));
+            frameSize = size(handles.videoData, [3, 2]);
             handles.zoomCenter = frameSize/2;
             handles.zoomFactor = 1;
         end
@@ -1021,12 +1026,12 @@ end
 handles = updateTagDisplay(handles);
 
 % Display the current video frame
-frame = handles.videoData(:, :, k);
+frame = getFrame(handles, k);
 if handles.showMasks
     % Mask overlay is on
     if ~isempty(handles.maskData)
         % Masks have been loaded
-        frame = labeloverlay(frame, handles.maskData(:, :, k), 'Transparency', handles.maskTransparency);
+        frame = labeloverlay(frame, squeeze(handles.maskData(k, :, :)), 'Transparency', handles.maskTransparency);
     end
 end
 
@@ -1559,7 +1564,7 @@ end
 disp(['Saving ROIs to file: ', selectedFile]);
 
 outputStruct.videoFile = currentVName;
-outputStruct.videoSize = size(handles.videoData);
+outputStruct.videoSize = size(handles.videoData, [2, 3, 1, 4:ndims(handles.videoData)]);
 outputStruct.ROIData = handles.ROIData;
 outputStruct.manualObjectTrackerVersion = handles.version;
 save(selectedFile, 'outputStruct');
@@ -1935,7 +1940,7 @@ function adjustContrast_Callback(hObject, ~, handles)
 % hObject    handle to adjustContrast (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-[~, handles.imageTuner] = imtune(handles.videoData(:, :, handles.k));
+[~, handles.imageTuner] = imtune(getFrame(handles));
 handles = updateDisplay(handles);
 guidata(hObject, handles);
 
@@ -2472,7 +2477,7 @@ function figure1_DeleteFcn(hObject, eventdata, handles)
 
 function handles = updateROIStatDisplay(handles)
 areaText = {};
-%frameSize = size(handles.videoData(:, :, handles.k));
+%frameSize = size(handles.videoData(handles.k, :, :));
 %widthPixels = frameSize(2);
 
 % Get the current stored unit
@@ -2830,10 +2835,10 @@ currentBotMaskPath = botMaskList{fileIndex};
 
 % Load top mask stack from file
 s = load(currentTopMaskPath);
-topMaskStack = permute(s.mask_pred, [2, 3, 1]);
+topMaskStack = s.mask_pred;
 % Load bottom mask stack from file
 s = load(currentBotMaskPath);
-botMaskStack = permute(s.mask_pred, [2, 3, 1]);
+botMaskStack = s.mask_pred;
 videoSize = getVideoSize(handles);
 handles.maskData = combineTopAndBottomMaskStacks(topMaskStack, botMaskStack, videoSize, handles.topMaskOrigin);
 
@@ -2852,35 +2857,35 @@ maskStack = zeros(videoSize, 'logical');
 %   using the given topMaskOrigin to correctly situate the
 %   top mask. The bottom mask is always nestled in the bottom
 %   left corner of the video.
-[hBot, wBot, ~] = size(botMaskStack);
-[hTop, wTop, ~] = size(topMaskStack);
-hVid = videoSize(1);
-wVid = videoSize(2);
+[~, hBot, wBot] = size(botMaskStack);
+[~, hTop, wTop] = size(topMaskStack);
+hVid = videoSize(2);
+wVid = videoSize(3);
 if (topMaskOrigin(1) + wTop - 1) > wVid
     % Mask has been shifted right such that right edge is off the video. Trim it.
     overhang = (topMaskOrigin(1) + wTop - 1) - wVid;
-    topMaskStack = topMaskStack(:, 1:end-overhang, :);
+    topMaskStack = topMaskStack(:, :, 1:end-overhang);
     wTop = wTop - overhang;
 end
 if topMaskOrigin(1) < 1
     % Mask has been shifted left such that left edge is off the video. Trim it.
     overhang = 1 - topMaskOrigin(1);
     topMaskOrigin(1) = 1;
-    topMaskStack = topMaskStack(:, overhang+1:end, :);
+    topMaskStack = topMaskStack(:, :, overhang+1:end);
     wTop = wTop - overhang;
 end
 if topMaskOrigin(2) < 1
     % Mask has been shifted up such that top edge is off the video. Trim it.
     overhang = 1 - topMaskOrigin(2);
     topMaskOrigin(2) = 1;
-    topMaskStack = topMaskStack(overhang+1:end, :, :);
+    topMaskStack = topMaskStack(:, overhang+1:end, :);
     hTop = hTop - overhang;
 end
 
 % Paste the top mask data into the right place in the full mask stack
-maskStack(topMaskOrigin(2):(hTop + topMaskOrigin(2)-1), topMaskOrigin(1):(topMaskOrigin(1) + wTop - 1), :) = topMaskStack;
+maskStack(:, topMaskOrigin(2):(hTop + topMaskOrigin(2)-1), topMaskOrigin(1):(topMaskOrigin(1) + wTop - 1)) = topMaskStack;
 % Paste the bottom mask data into the right place in the full mask stack
-maskStack((hVid - hBot + 1):hVid, 1:wBot, :) = botMaskStack;
+maskStack(:, (hVid - hBot + 1):hVid, 1:wBot) = botMaskStack;
 
 function [handles, maskDir] = getMaskDirFromUser(handles)
 % Use last selected maskPath as default directory to start on
