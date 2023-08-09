@@ -43,10 +43,37 @@ maskStacks = cell(1, length(trainingSetPaths));
 for k = 1:length(trainingSetPaths)
     trainingSetPath = trainingSetPaths{k};
     fprintf('Loading training set from %s...\n', trainingSetPath);
-    load(trainingSetPath, 'imageStack', 'maskStack');
-    imageStacks{k} = imageStack;
-    maskStacks{k} = maskStack;
-    fprintf('...found %d frames.\n', size(imageStack, 1));
+    S = load(trainingSetPath);
+    try
+        imageStacks{k} = S.imageStack;
+        maskStacks{k} = logical(S.maskStack);
+    catch
+        % Try some legacy field names
+        try
+            imageStacks{k} = S.assembledRandomizedClips_top;
+            maskStacks{k} = logical(S.mask_stack_top);
+        catch
+            try
+                imageStacks{k} = S.assembledRandomizedClips_top;
+                maskStacks{k} = logical(S.mask_stack_top);
+            catch
+                try
+                    imageStacks{k} = S.assembledRandomizedClips_bot;
+                    maskStacks{k} = logical(S.mask_stack_bot);
+                catch
+                    try
+                        imageStacks{k} = S.assembledRandomizedClips_bottom;
+                        maskStacks{k} = logical(S.mask_stack_bottom);
+                    catch
+                        fn = join(fieldnames(S), ',');
+                        fn = fn{1};
+                        error('Could not find appropriate fields for imageStack and maskStack in file %s - instead found fields %s', trainingSetPath, fn);
+                    end
+                end
+            end
+        end
+    end
+    fprintf('...found %d frames.\n', size(imageStacks{k}, 1));
 end
 
 fprintf('Concatenating training sets...\n');
