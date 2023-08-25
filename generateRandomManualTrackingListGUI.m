@@ -22,7 +22,7 @@ function varargout = generateRandomManualTrackingListGUI(varargin)
 
 % Edit the above text to modify the response to help generateRandomManualTrackingListGUI
 
-% Last Modified by GUIDE v2.5 04-Mar-2023 20:53:24
+% Last Modified by GUIDE v2.5 24-Aug-2023 14:27:00
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -51,6 +51,14 @@ function generateRandomManualTrackingListGUI_OpeningFcn(hObject, eventdata, hand
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to generateRandomManualTrackingListGUI (see VARARGIN)
+
+% Use the provided command line parameter file
+if nargin > 0
+    parameterFile = varargin{1};
+    S = load(parameterFile);
+    handles = loadParams(handles, S.params);
+    varargin(1) = [];
+end
 
 % Choose default command line output for generateRandomManualTrackingListGUI
 handles.output = struct.empty();
@@ -377,6 +385,7 @@ end
 params.t_stats_filter_field_names = get_t_stats_filter_field_names(handles);
 params.t_stats_filters = get_t_stats_filters(handles);
 [params.t_stats_filter_offsets, params.t_stats_filter_offset_anchors] = get_t_stats_filter_offsets(handles);
+params.t_stats_filter_combination_mode = get_t_stats_combination_mode(handles);
 
 function t_stats_filter_field_names = get_t_stats_filter_field_names(handles)
 raw_text = handles.t_stats_filter_field_names.String;
@@ -510,6 +519,17 @@ if isfield(params, 't_stats_filters')
     handles.t_stats_filters.String = t_stats_filters;
 else
     handles.t_stats_filters.String = {};
+end
+
+if isfield(params, 't_stats_filter_combination_mode')
+    switch params.t_stats_filter_combination_mode
+        case 'AND'
+            handles.t_stats_filter_combinaton_mode_AND_button.Value = true;
+        case 'OR'
+            handles.t_stats_filter_combinaton_mode_OR_button.Value = true;
+        otherwise
+            error('Invalid t_stats filter combination mode: %s', params.t_stats_filter_combination_mode);
+    end
 end
 
 if isfield(params, 't_stats_filter_offsets') && isfield(params, 't_stats_filter_offset_anchors')
@@ -910,8 +930,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-
 function t_stats_filters_Callback(hObject, eventdata, handles)
 % hObject    handle to t_stats_filters (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -955,3 +973,15 @@ function t_stats_filter_offsets_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+function mode = get_t_stats_combination_mode(handles)
+% Get the function corresponding to the selected t_stats filter combination
+% mode (either the "and" or "or" function)
+mode = handles.t_stats_filter_combination_mode_group.SelectedObject.String;
+
+% --- Executes when selected object is changed in t_stats_filter_combination_mode_group.
+function t_stats_filter_combination_mode_group_SelectionChangedFcn(hObject, eventdata, handles)
+% hObject    handle to the selected object in t_stats_filter_combination_mode_group 
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+

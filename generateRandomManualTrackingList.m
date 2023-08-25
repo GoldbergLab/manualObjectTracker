@@ -91,6 +91,16 @@ if isstruct(videoBaseDirectoriesOrStruct)
         warning('There should be the same number of t_stats field names, filters, and offsets.')
     end
 
+    % Load t_stats filter combination_mode
+    switch p.t_stats_filter_combination_mode
+        case 'AND'
+            t_stats_filter_combination_function = @and;
+        case 'OR'
+            t_stats_filter_combination_function = @or;
+        otherwise
+            error('Invalid t_stats filter combination mode: %s', p.t_stats_combination_mode);
+    end
+
 end
 
 if ~exist('clipDirectory', 'var')
@@ -136,6 +146,8 @@ if enableWeighting || num_t_stats_filters > 0
                     field_name = t_stats_filter_field_names{filter_field_num};
                     lickStructs(sessionNum).lick_struct(trialNum).t_stats.(field_name) = {t_stats([t_stats.trial_num] == trialNum).(field_name)};
                 end
+                lickStructs(sessionNum).lick_struct(trialNum).t_stats.spout_contact = {t_stats([t_stats.trial_num] == trialNum).spout_contact};
+                lickStructs(sessionNum).lick_struct(trialNum).t_stats.spout_contact_offset = {t_stats([t_stats.trial_num] == trialNum).spout_contact_offset};
             end
         end
     else
@@ -406,9 +418,19 @@ for videoNum = 1:length(videoFilePaths)
             frameTypeMasks.spoutPosition.(spoutPositionName)(startFrame:endFrame) = (spoutPos(startFrame:endFrame) == spoutPositionIndex);
         end
 
-        for spoutContactNum = 1:length(lick_struct(videoNum).sp_contact_onset)
-            onset = lick_struct(videoNum).sp_contact_onset(spoutContactNum) + cueTimes(videoNum);
-            offset = lick_struct(videoNum).sp_contact_offset(spoutContactNum) + cueTimes(videoNum);
+        if isempty(lick_struct(videoNum).sp_contact_onset) && ~isempty(lick_struct(videoNum).t_stats.spout_contact)
+            % Lick struct doesn't have the spout contacts, use the t_stats
+            % fields instead
+            spoutContactOnsets = cell2mat(lick_struct(videoNum).t_stats.spout_contact);
+            spoutContactOffsets = cell2mat(lick_struct(videoNum).t_stats.spout_contact_offset);
+        else
+            spoutContactOnsets = lick_struct(videoNum).sp_contact_onset;
+            spoutContactOffsets = lick_struct(videoNum).sp_contact_offset;
+        end
+
+        for spoutContactNum = 1:length(spoutContactOnsets)
+            onset = spoutContactOnsets(spoutContactNum) + cueTimes(videoNum);
+            offset = spoutContactOffsets(spoutContactNum) + cueTimes(videoNum);
             frameTypeMasks.tongueType.noSpoutContactTongue(startFrame:endFrame) = ...
                 (((onset - idx) < periContactTongueFrameMargin) & ((onset - idx) > 0)) | ...
                 (((idx - offset) < periContactTongueFrameMargin) & ((idx - offset > 0)));
@@ -441,7 +463,7 @@ for videoNum = 1:length(videoFilePaths)
             for filter_field_num = 1:num_t_stats_filters
                 field_name = t_stats_filter_field_names{filter_field_num};
                 field_value = lick_struct(videoNum).t_stats.(field_name){lickNum};
-                lick_filter_match = lick_filter_match & t_stats_filters{filter_field_num}(field_value);
+                lick_filter_match = t_stats_filter_combination_function(lick_filter_match, t_stats_filters{filter_field_num}(field_value));
                 fprintf('    Checking %s:\n', field_name);
                 fprintf('      %d\n\n', t_stats_filters{filter_field_num}(field_value))
             end
@@ -525,12 +547,15 @@ if enableWeighting
         fprintf('Adding %d extra random samples to counteract rounding errors.\n', length(remainingChosenIdx));
         chosenIdx = [chosenIdx, remainingChosenIdx];
     end
-else
+elseif tStatsPresent
     % Filter with t_stats filters, if present
     filteredIdx = overallIdx(tStatsMask);
     % Pick random frame numbers (without weighting)
     chosenIdx = datasample(filteredIdx, numAnnotations, 'Replace', false);
+else
+    chosenIdx = datasample(overallIdx, numAnnotations, 'Replace', false);
 end
+
 fprintf('...done choosing random frames.\n');
 
 chosenFrames = overallIdx(chosenIdx);  % Chosen frames, numbered in the overall system
