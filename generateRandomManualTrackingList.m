@@ -459,13 +459,13 @@ for videoNum = 1:length(videoFilePaths)
             % If present, find matching frame mask for t_stats filters
             % for this lick
             lick_filter_match = true;
-            fprintf('  Lick #%d\n', lickNum);
+%             fprintf('  Lick #%d\n', lickNum);
             for filter_field_num = 1:num_t_stats_filters
                 field_name = t_stats_filter_field_names{filter_field_num};
                 field_value = lick_struct(videoNum).t_stats.(field_name){lickNum};
                 lick_filter_match = t_stats_filter_combination_function(lick_filter_match, t_stats_filters{filter_field_num}(field_value));
-                fprintf('    Checking %s:\n', field_name);
-                fprintf('      %d\n\n', t_stats_filters{filter_field_num}(field_value))
+%                 fprintf('    Checking %s:\n', field_name);
+%                 fprintf('      %d\n\n', t_stats_filters{filter_field_num}(field_value))
             end
             if lick_filter_match
                 % This lick matched all filters. Using provided 
