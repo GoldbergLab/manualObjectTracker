@@ -53,7 +53,7 @@ function generateRandomManualTrackingListGUI_OpeningFcn(hObject, eventdata, hand
 % varargin   command line arguments to generateRandomManualTrackingListGUI (see VARARGIN)
 
 % Use the provided command line parameter file
-if nargin > 0
+if ~isempty(varargin)
     parameterFile = varargin{1};
     S = load(parameterFile);
     handles = loadParams(handles, S.params);
