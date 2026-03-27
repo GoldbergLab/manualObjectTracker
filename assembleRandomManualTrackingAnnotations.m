@@ -152,6 +152,7 @@ for k = 1:numVideos
 
         % Store the extracted ROI data from the selected frame
         for j = 1:numel(usersCurrent)
+            user = usersCurrent{j};
             outputStruct.ROIData.(user).xPoints(:,frameNumberCount+1) = newXPoints{j};
             outputStruct.ROIData.(user).yPoints(:,frameNumberCount+1) = newYPoints{j};
             outputStruct.ROIData.(user).xFreehands(:,frameNumberCount+1) = newXFreehands{j};
