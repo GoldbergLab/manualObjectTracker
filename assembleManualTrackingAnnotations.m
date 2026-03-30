@@ -32,8 +32,18 @@ function assembleManualTrackingAnnotations(videoDirectories, saveFilepath, topOr
 %
 % Written by Brian Kardon bmk27@cornell.edu 2018
 % Modified 2026 to support normal-mode annotation assembly
+arguments
+    videoDirectories {mustBeText}
+    saveFilepath {mustBeTextScalar}
+    topOrigin double = [1, 1]
+    topSize double = [192, 144]
+    botOrigin double = [1, 160]
+    botSize double = [192, 240]
+    topROINum double = 1
+    skipUnlabeled logical = true
+end
 
-if ~exist('topOrigin', 'var') || ~exist('topSize', 'var') || ~exist('botOrigin', 'var') || ~exist('botSize', 'var') || ~exist('topROINum', 'var')
+if isempty(topOrigin) || isempty(topSize) || isempty(botOrigin) || isempty(botSize) || isempty(topROINum)
     makeTrainingFile = false;
     fprintf('Mask information not provided - not creating final training file.\n');
 else
