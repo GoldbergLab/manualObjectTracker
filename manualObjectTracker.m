@@ -1544,8 +1544,9 @@ else
     [~, currentVName] = getCurrentVideoFileSelection(handles);
 end
 
-[~, currentVName, ~] = fileparts(currentVName);
-suggestedROIFilename = makeROINameFromVideoName(currentVName);
+[~, currentVNameBase, currentVNameExt] = fileparts(currentVName);
+suggestedROIFilename = makeROINameFromVideoName(currentVNameBase);
+currentVName = [currentVNameBase, currentVNameExt];
 if get(handles.useDefaultROIPath, 'Value')
     defaultROIPath = getCurrentROIFolder(handles);
     if ~exist(defaultROIPath, 'dir')
@@ -2546,7 +2547,7 @@ for n = 1:handles.numROIs
     end
     handles.ROIData.(handles.currUser).stats.areaPixels(n, handles.k) = areaPixels;
     handles.ROIData.(handles.currUser).stats.areaUnits(n, handles.k) = areaUnits;
-    areaText{end+1} = sprintf('%.02f %s²', areaUnits, unit);
+    areaText{end+1} = sprintf('%.02f %sï¿½', areaUnits, unit);
 end
 set(handles.ROIAreas, 'String', areaText);
 handles = noteThatChangesNeedToBeSaved(handles);

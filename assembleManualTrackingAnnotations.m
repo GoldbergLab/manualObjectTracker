@@ -79,8 +79,15 @@ for d = 1:length(videoDirectories)
         videoFilename = a.outputStruct.videoFile;
         videoFilePath = fullfile(videoDir, videoFilename);
         if ~exist(videoFilePath, 'file')
-            fprintf('Warning: Video file %s not found for ROI file %s, skipping.\n', videoFilePath, roiFilePath);
-            continue;
+            % Legacy ROI files may lack a file extension - try to find a
+            %   matching video file in the directory
+            matches = dir(fullfile(videoDir, [videoFilename, '.*']));
+            if isempty(matches)
+                fprintf('Warning: Video file %s not found for ROI file %s, skipping.\n', videoFilePath, roiFilePath);
+                continue;
+            end
+            videoFilename = matches(1).name;
+            videoFilePath = fullfile(videoDir, videoFilename);
         end
         roiFiles{end+1} = roiFilePath; %#ok<AGROW>
         videoFiles{end+1} = videoFilePath; %#ok<AGROW>
