@@ -168,6 +168,8 @@ for k = 1:numVideos
             newXFreehands{j} = outputStructCurrent.ROIData.(user).xFreehands(:, frameNumber);
             newYFreehands{j} = outputStructCurrent.ROIData.(user).yFreehands(:, frameNumber);
             newAbsent{j} = outputStructCurrent.ROIData.(user).absent(:, frameNumber);
+            newXProj{j} = outputStructCurrent.ROIData.(user).xProj(:, frameNumber);
+            newZProj{j} = outputStructCurrent.ROIData.(user).zProj(:, frameNumber);
 
             % Check if there are any labels of any kind
             pointLabels = any(cellfun(@(x)~isempty(x), newXPoints{j}), 'all');
@@ -191,6 +193,8 @@ for k = 1:numVideos
             outputStruct.ROIData.(user).xFreehands(:,frameNumberCount+1) = newXFreehands{j};
             outputStruct.ROIData.(user).yFreehands(:,frameNumberCount+1) = newYFreehands{j};
             outputStruct.ROIData.(user).absent(:,frameNumberCount+1) = newAbsent{j};
+            outputStruct.ROIData.(user).xProj(:,frameNumberCount+1) = newXProj{j};
+            outputStruct.ROIData.(user).zProj(:,frameNumberCount+1) = newZProj{j};
         end
 
         % Load video data lazily (only if we actually have labeled frames)
@@ -244,7 +248,7 @@ function userROIData = createNewUserROIData(numFrames, numROIs)
 % Create blank data structures to hold user ROI data
 [userROIData.xPoints, userROIData.yPoints] = createBlankROIs(numFrames, numROIs);
 [userROIData.xFreehands, userROIData.yFreehands] = createBlankROIs(numFrames, numROIs);
-[userROIData.xProj, userROIData.zProj] = createBlankROIs(numFrames, 1);
+[userROIData.xProj, userROIData.zProj] = createBlankROIs(numFrames, numROIs);
 userROIData.absent = createBlankAbsentData(numFrames, numROIs);
 
 function [x, y] = createBlankROIs(numFrames, numROIs)
